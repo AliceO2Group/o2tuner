@@ -1,4 +1,5 @@
-"""Install this Python package.
+"""
+Install this Python package.
 """
 
 
@@ -10,7 +11,8 @@ from setuptools import setup, find_packages
 
 
 class Setup():
-    """Convenience wrapper (for C.I. purposes) of the `setup()` call form `setuptools`.
+    """
+    Convenience wrapper (for C.I. purposes) of the `setup()` call form `setuptools`.
     """
     def __init__(self, **kw):
         self.conf = kw
@@ -69,7 +71,8 @@ SETUP = Setup(
         "Intended Audience :: Developers",
         "Topic :: Scientific/Engineering :: Physics",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-        "Programming Language :: Python :: 3.8"
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9"
     ],
 
     # What does your project relate to?
@@ -102,9 +105,9 @@ SETUP = Setup(
     # points provide cross-platform support and allow pip to create the appropriate form of
     # executable for the target platform. See:
     # https://chriswarrick.com/blog/2014/09/15/python-apps-the-right-way-entry_points-and-scripts/
-    # entry_points={
-    #     "console_scripts": ["o2tuner = o2tuner:entrypoint"]
-    # }
+    entry_points={
+        "console_scripts": ["o2tuner = o2tuner:entrypoint"]
+    }
 )
 
 if __name__ == "__main__":

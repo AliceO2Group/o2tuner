@@ -1,8 +1,33 @@
-""" This is a dummy module for the moment
+"""
+This is a dummy module for the moment
 """
 
 
-def add_one(number):
-    """Adds 1 to number
+class O2tuner(object):
     """
-    return number + 1
+    Steering class for tuning
+    """
+
+    def __init__(self, handler) -> None:
+        """
+        Constructor is empty
+        """
+        self._handler = handler
+
+    def reset_handler(self, handler):
+        """
+        Reset the handler
+        """
+        self._handler = handler
+
+    def init(self, **kwargs):
+        """
+        Initialisation function
+        """
+        self._handler.initialise(**kwargs)
+
+    def run(self):
+        """
+        Run optimisation
+        """
+        self._handler.optimise()

@@ -3,18 +3,19 @@ Module used to test if installation is successful
 """
 
 
-from o2tuner import o2tuner
+import o2tuner
 
 
-def add(val):
+def run_entrypoint():
     """
-    I add
+    Test the entrypoint
     """
-    return o2tuner.add_one(val)
+    o2tuner.entrypoint()
+    return 0
 
 
-def test_add():
+def test_run_entrypoint():
     """
-    Test add_one existence
+    Ensure all run is performed
     """
-    assert add(42) == 43
+    assert run_entrypoint() == 0

@@ -1,6 +1,6 @@
 [FORMAT]
 indent-string='    '
-max-line-length=120
+max-line-length=150
 
 [BASIC]
 function-naming-style=snake_case
@@ -11,7 +11,7 @@ attr-naming-style=snake_case
 class-naming-style=PascalCase
 
 [MESSAGES CONTROL]
-disable=useless-object-inheritance
+disable=useless-object-inheritance,missing-function-docstring
 
 [DESIGN]
 max-args=10

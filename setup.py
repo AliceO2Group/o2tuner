@@ -14,6 +14,7 @@ class Setup():
     """
     Convenience wrapper (for C.I. purposes) of the `setup()` call form `setuptools`.
     """
+
     def __init__(self, **kw):
         self.conf = kw
         self.work_dir = os.path.abspath(os.path.dirname(__file__))
@@ -41,7 +42,8 @@ class Setup():
         assert "long_description" not in self.conf
         assert "long_description_content_type" not in self.conf
         with open(os.path.join(self.work_dir, "README.md"), encoding="utf-8") as file_path:
-            long_desc = "\n".join([row for row in file_path if not row.startswith("[![")])
+            long_desc = "\n".join(
+                [row for row in file_path if not row.startswith("[![")])
         self.conf["long_description"] = long_desc
         self.conf["long_description_content_type"] = "text/markdown"
 
@@ -85,7 +87,7 @@ SETUP = Setup(
     # List run-time dependencies here. These will be installed by pip when your project is
     # installed. For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=[],
+    install_requires=["optuna", "colorama", "click"],
 
     python_requires=">=3.8",
 

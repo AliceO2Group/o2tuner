@@ -8,8 +8,8 @@ function pinfo() { echo -e "\033[32m${1}\033[m" >&2; }
 function pwarn() { echo -e "\033[33m${1}\033[m" >&2; }
 function perr() { echo -e "\033[31m${1}\033[m" >&2; }
 
-setup-o2tuner() {
-    pinfo "installing: o2tuner"
+test-setup() {
+    pinfo "running test: o2tuner installation"
     pip3 install --upgrade --force-reinstall --no-deps -e . --user
 }
 
@@ -26,14 +26,14 @@ test-flake8() {
     # stop the build if there are Python syntax errors or undefined names
     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-    flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
 }
 
 test-pytest() {
-    setup-o2tuner
+    test-setup
     pinfo "running test: pytest"
     type pytest
-    pytest tests
+    pytest -x tests
 }
 
 test-all() {
@@ -50,6 +50,7 @@ while [[ $# -gt 0 ]]; do
     all) test-all ;;
     pylint) test-pylint ;;
     flake8) test-flake8 ;;
+    setup) test-setup ;;
     pytest) test-pytest ;;
 
     --quiet)
@@ -65,6 +66,7 @@ while [[ $# -gt 0 ]]; do
         pwarn "Specific tests:"
         pwarn "    run_tests.sh pylint                    # test with pylint"
         pwarn "    run_tests.sh flake8                    # test with flake8"
+        pwarn "    run_tests.sh setup                     # test setup"
         pwarn "    run_tests.sh pytest                    # test with pytest"
         pwarn ""
         pwarn "Parameters:"

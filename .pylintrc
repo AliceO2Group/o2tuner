@@ -16,3 +16,4 @@ disable=useless-object-inheritance,missing-function-docstring
 [DESIGN]
 max-args=10
 max-locals=40
+max-attributes=10

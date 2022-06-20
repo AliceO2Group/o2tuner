@@ -87,7 +87,7 @@ SETUP = Setup(
     # List run-time dependencies here. These will be installed by pip when your project is
     # installed. For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=["optuna", "colorama", "click"],
+    install_requires=["optuna", "colorama", "click", "matplotlib", "psutil"],
 
     python_requires=">=3.8",
 
@@ -95,7 +95,8 @@ SETUP = Setup(
     # these using the following syntax, for example:
     # $ pip install -e .[dev,test]
     extras_require={
-        "dev": []
+        "dev": [],
+        "test": ["pylint", "pytest"]
     },
 
     # Although 'package_data' is the preferred approach, in some case you may need to place data

@@ -184,7 +184,7 @@ def objective_cut_tuning(trial, user_config):
 
     # ...and annotate drawn space and metrics to trial so we can re-use it
     annotate_trial(trial, "space", list(this_array))
-    annotate_trial(trial, "rel_steps", 1 - rel_steps)
+    annotate_trial(trial, "rel_steps", rel_steps)
     annotate_trial(trial, "rel_hits", rel_hits)
 
     # remove all the artifacts we don't need to keep space

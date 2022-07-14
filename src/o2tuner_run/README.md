@@ -2,10 +2,12 @@
 This directory contains all necessary tools/scripts to run a full cut optimisation
 * reference and baseline (under testing),
 * optimisation (under testing),
-* evaluation (preliminary),
+* evaluation (under testing),
 * closure (to be implemented).
 
 **NOTE:** So far this provides more the proof-of-principle functionality rather than an actual optimisation that can be used for production!
+
+In the following it is also assumed that your `o2tuner` python package is located at `$O2TUNER`.
 
 ## Reference and baseline (under testing)
 A reference run is steered with
@@ -19,14 +21,14 @@ So we can go directly to the optimisation step!
 ## Optimisation (under testing)
 Run the optimisation with
 ```bash
-python $O2TUNER/src/o2tuner_run/cut_tuning_optimisation.py -c <workdir>/optuna_config.yaml -u <workdir>/cut_tuning_config.yaml
+python $O2TUNER/src/o2tuner_run/cut_tuning_optimise.py -c <workdir>/optuna_config.yaml -u <workdir>/cut_tuning_config.yaml
 ```
 
-## Evaluation (under development)
-A simple evaluation using some of the `optuna`'s visualisation tools can be achieved with
+## Evaluation (under testing)
+The evaluation step is meant to give the user some insight into properties of parameters, their value distributions, evolutions, correlations and importances.
 ```bash
-python $O2TUNER/src/o2tuner_run/cut_tuning_evaluation.py -c <workdir>/optuna_config.yaml
+python $O2TUNER/src/o2tuner_run/cut_tuning_evaluate.py -c <workdir>/optuna_config.yaml [-u <path/to/user_config>] [-o <output/for/plots>]
 ```
-Note, however, that due to the number of parameters, some of these plots are not yet very useful.
 
 ## Closure (not yet implemented)
+**This will be based on the O2DPG RelVal**

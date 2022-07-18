@@ -9,6 +9,7 @@ variable-naming-style=snake_case
 method-naming-style=snake_case
 attr-naming-style=snake_case
 class-naming-style=PascalCase
+good-names=ax, df, i, j, k, x, y, z
 
 [MESSAGES CONTROL]
 disable=useless-object-inheritance,missing-function-docstring

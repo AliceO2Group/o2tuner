@@ -20,7 +20,7 @@ def annotate_trial(trial, key, value):
         print(f"ERROR: This trial has annotation {key} already")
         sys.exit(1)
 
-    user_attributes[key] = value
+    trial.set_user_attr(key, value)
 
 
 def make_trial_directory(trial):

@@ -17,7 +17,7 @@ from optuna.importance import get_param_importances
 from optuna.study._study_direction import StudyDirection
 
 from o2tuner.io import parse_yaml
-from o2tuner.utils import load_or_create_study
+from o2tuner.backends import load_or_create_study
 from o2tuner.sampler import construct_sampler
 
 

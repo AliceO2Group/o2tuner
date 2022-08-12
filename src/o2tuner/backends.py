@@ -2,9 +2,80 @@
 Mainstream and custom backends should be placed here
 """
 import sys
+from time import time
+from os import getcwd, chdir
+from os.path import join
 from inspect import signature
+import pickle
 
-from o2tuner.utils import load_or_create_study
+import optuna
+
+from o2tuner.io import make_dir, exists_file
+from o2tuner.utils import annotate_trial
+
+
+def make_trial_directory(trial):
+    """
+    Make a directory and attach to trial object as user attribute
+    """
+    user_attributes = trial.user_attrs
+    if "cwd" in user_attributes:
+        print(f"ERROR: This trial has already a directory attached: {user_attributes['cwd']}")
+        sys.exit(1)
+    if "cwd" not in trial.study.user_attrs:
+        print("ERROR: This optimisation was not configured to run inside a directory. Please define a working directory.")
+        sys.exit(1)
+    top_dir = trial.study.user_attrs["cwd"]
+    timestamp = str(int(time() * 1000000))
+    cwd = join(top_dir, timestamp)
+    make_dir(cwd)
+    annotate_trial(trial, "cwd", cwd)
+    return cwd
+
+
+def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=None):
+    """
+    Helper to load or create a study
+    Returns tuple of whether it can run via DB interface and optuna.study.study.Study
+    """
+    if study_name and storage:
+        # there is a database we can connect to for multiprocessing
+        # Although optuna would come up with a unique name when study_name is None,
+        # we force a name to be given by the user for those cases
+        try:
+            study = optuna.load_study(study_name=study_name, storage=storage, sampler=sampler)
+            print(f"Loading existing study {study_name} from storage {storage}")
+        except KeyError:
+            study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
+            print(f"Creating new study {study_name} at storage {storage}")
+        except ImportError as exc:
+            # Probably cannot import MySQL stuff
+            print("Probably cannot import what is needed for database access. Will try to attempt a serial run.")
+            print(exc)
+        else:
+            return True, study
+    # This is a "one-time" in-memory study so we don't care so much for the name honestly, could be None
+    if study_name and workdir:
+        # Try to see if there is a study saved here
+        # Pickling is unsafe, we should try to find another way eventually
+        file_name = join(workdir, f"{study_name}.pkl")
+        if exists_file(file_name):
+            with open(file_name, "rb") as save_file:
+                print(f"Loading existing study {study_name} from storage {file_name}")
+                return pickle.load(save_file)
+
+    return False, optuna.create_study(study_name=study_name, sampler=sampler)
+
+
+def save_study(study, workdir):
+    """
+    Wrapper to pickle a study
+    Pickling is unsafe, we should try to find another way eventually
+    """
+    if workdir:
+        file_name = join(workdir, f"{study.study_name}.pkl")
+        with open(file_name, "wb") as save_file:
+            pickle.dump(study, save_file)
 
 
 class OptunaHandler(object):
@@ -12,12 +83,14 @@ class OptunaHandler(object):
     Handler based on Optuna backend
     """
 
-    def __init__(self, db_study_name=None, db_storage=None, workdir=None, user_config=None) -> None:
+    def __init__(self, db_study_name=None, db_storage=None, workdir=None, user_config=None, run_serial=False) -> None:
         """
         Constructor
         """
         # user objective function
         self._objective = None
+        # Flag whether we need a dedicated cwd per trial
+        self._needs_cwd_per_trial = False
         # chosen sampler (can be None, optuna will use TPE then)
         self._sampler = None
         # our study object
@@ -32,10 +105,25 @@ class OptunaHandler(object):
         self.workdir = workdir
         # optional user configuration that will be passed down to each call of the objective
         self.user_config = user_config
+        # Flag to indicate if this is a serial run
+        self.run_serial = run_serial
+
+    def objective_wrapper(self, trial):
+        cwd = None
+        this_dir = getcwd()
+        if self._needs_cwd_per_trial:
+            cwd = make_trial_directory(trial)
+        if cwd:
+            chdir(cwd)
+        ret = self._objective(trial)
+        chdir(this_dir)
+        return ret
 
     def initialise(self, n_trials=100):
         self._n_trials = n_trials
-        self._study = load_or_create_study(self.db_study_name, self.db_storage, self._sampler)
+        has_db_access, self._study = load_or_create_study(self.db_study_name, self.db_storage, self._sampler, self.workdir)
+        # Overwrite in case no DB access but a parallel execution was desired before
+        self.run_serial = not has_db_access
 
         if self.workdir:
             self._study.set_user_attr("cwd", self.workdir)
@@ -44,11 +132,18 @@ class OptunaHandler(object):
         if not self._n_trials or not self._objective:
             print("ERROR: Not initialised: Number of trials and objective function need to be set")
             return
-        self._study.optimize(self._objective, n_trials=self._n_trials)
+        self._study.optimize(self.objective_wrapper, n_trials=self._n_trials)
+
+    def finalise(self):
+        if self.run_serial and self.workdir:
+            # Save the study if this is run serial and a workdir is given
+            save_study(self._study, self.workdir)
 
     def set_objective(self, objective):
         sig = signature(objective)
         n_params = len(sig.parameters)
+        if hasattr(objective, "needs_cwd"):
+            self._needs_cwd_per_trial = True
         if n_params > 2 or not n_params:
             print("Invalid signature of objective funtion. Need either 1 argument (only trial object) or 2 arguments (trial object and user_config)")
             sys.exit(1)

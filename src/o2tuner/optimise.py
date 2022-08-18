@@ -72,7 +72,7 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
             break
         # We assume here that the optimisation might take some time, so we can sleep for a bit
         sleep(10)
-    return 0
+    return True
 
 
 def needs_cwd(func):

@@ -61,8 +61,8 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=No
         file_name = join(workdir, f"{study_name}.pkl")
         if exists_file(file_name):
             with open(file_name, "rb") as save_file:
-                print(f"Loading existing study {study_name} from storage {file_name}")
-                return pickle.load(save_file)
+                print(f"Loading existing study {study_name} from file {file_name}")
+                return False, pickle.load(save_file)
 
     return False, optuna.create_study(study_name=study_name, sampler=sampler)
 

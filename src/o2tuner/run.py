@@ -12,6 +12,26 @@ from o2tuner.optimise import optimise
 from o2tuner.io import make_dir
 from o2tuner.config import load_config, prepare_work_dir, get_stages_done, set_stage_done, set_work_dir, get_work_dir
 from o2tuner.graph import create_graph_walker
+from o2tuner.inspector import O2TunerInspector
+
+OPTIMISATION_STAGE_FLAG = 0
+EVALUATION_STAGE_FLAG = 1
+USER_STAGE_FLAG = 2
+
+
+def get_stage_work_dir(name, config):
+    cwd_rel = config.get("cwd", name)
+    return join(get_work_dir(), cwd_rel), cwd_rel
+
+
+def get_optuna_config(name, config):
+    optuna_config = {k: v for k, v in config.items() if k not in ("entrypoint", "objective", "script", "config")}
+    if "study" not in optuna_config:
+        optuna_config["study"] = {"name": name}
+        return optuna_config
+    if "name" not in optuna_config["study"]:
+        optuna_config["study"]["name"] = name
+    return optuna_config
 
 
 def run_cmd_or_python(cwd, name, config):
@@ -42,13 +62,18 @@ def run_cmd_or_python(cwd, name, config):
     return True
 
 
-def run_optimisation(cwd, config):
+def run_optimisation(cwd, name, config):
     """
     Wrapper to run the optimisation.
     """
     func_name = config.get("entrypoint", config.get("objective", None))
+    if not func_name or "file" not in config:
+        print("ERROR: Need path to python file and name of function entrypoint")
+        return False
     func = import_function_from_file(config["file"], func_name)
-    optuna_config = {k: v for k, v in config.items() if k not in ("entrypoint", "objective", "script")}
+    if not func:
+        return False
+    optuna_config = get_optuna_config(name, config)
 
     user_config = config.get("config", {})
     # cache current directory
@@ -60,20 +85,68 @@ def run_optimisation(cwd, config):
     return ret
 
 
-def run_stages(config, which_stages):  # noqa: C901
+def run_inspector(cwd, config, stages_optimisation):
+    """
+    Wrapper to run the optimisation.
+    """
+    func_name = config.get("entrypoint", None)
+    if not func_name or "file" not in config:
+        print("ERROR: Need path to python file and name of function entrypoint")
+        return False
+    func = import_function_from_file(config["file"], func_name)
+    if not func:
+        return False
+    # which optimisations to load
+    if "optimisations" not in config:
+        print("ERROR: Need key \"optimisations\" to know which optimisations to load")
+        return False
+
+    user_config = config.get("config", {})
+
+    inspectors = []
+
+    for optimisation in config["optimisations"]:
+        if optimisation not in stages_optimisation:
+            print(f"WARNING: Optimisation stage {optimisation} not defined, cannot construct inspector for that. Skip...")
+            continue
+        opt_config = stages_optimisation[optimisation]
+        opt_cwd, _ = get_stage_work_dir(optimisation, opt_config)
+        optuna_config = get_optuna_config(optimisation, opt_config)
+        insp = O2TunerInspector()
+        if not insp.load(optuna_config, opt_cwd, user_config):
+            continue
+        inspectors.append(insp)
+
+    if not inspectors:
+        print("WARNING: No O2TunerInspectors loaded, nothing to do")
+        return False
+
+    # cache current directory
+    this_dir = getcwd()
+    # change to this cwd and afterwards back
+    chdir(cwd)
+    ret = func(inspectors, user_config)
+    chdir(this_dir)
+    return ret
+
+
+def run_stages(config, which_stages):  # noqa: C901 pylint: disable=too-many-branches
     """
     Run the stages defined in the config specified by the user
     Run all if nothing is specified
     """
-    work_dir = get_work_dir()
     stages_user = config.get("stages_user", {})
     stages_optimisation = config.get("stages_optimisation", {})
+    stages_evaluation = config.get("stages_evaluation", {})
 
     # Flag normal user stages with False to indicate that this is not an optimisation step
-    stages = [(name, value, False) for name, value in stages_user.items()]
+    stages = [(name, value, USER_STAGE_FLAG) for name, value in stages_user.items()]
     for name, value in stages_optimisation.items():
         # Instead, flag these stages with True to indicate these are optimisation steps
-        stages.append((name, value, True))
+        stages.append((name, value, OPTIMISATION_STAGE_FLAG))
+    for name, value in stages_evaluation.items():
+        # Instead, flag these stages with True to indicate these are optimisation steps
+        stages.append((name, value, EVALUATION_STAGE_FLAG))
 
     if not stages:
         print("WARNING: No stages found, nothing to do")
@@ -111,17 +184,19 @@ def run_stages(config, which_stages):  # noqa: C901
 
     # Now loop stage-by-stage
     for ind in stages_to_do:
-        name, value, is_optimisation = stages[ind]
+        name, value, stage_flag = stages[ind]
         print(f"--> STAGE {name} <--")
-        cwd_rel = value.get("cwd", name)
-        cwd = join(work_dir, cwd_rel)
+        cwd, cwd_rel = get_stage_work_dir(name, value)
         make_dir(cwd)
 
-        if is_optimisation and not run_optimisation(cwd, value):
+        if stage_flag == OPTIMISATION_STAGE_FLAG and not run_optimisation(cwd, name, value):
             print(f"There was a problem in OPTIMISATION stage {name}")
             return 1
-        if not is_optimisation and not run_cmd_or_python(cwd, name, value):
-            print(f"There was a problem in CUSTOM  stage {name}")
+        if stage_flag == USER_STAGE_FLAG and not run_cmd_or_python(cwd, name, value):
+            print(f"There was a problem in CUSTOM stage {name}")
+            return 1
+        if stage_flag == EVALUATION_STAGE_FLAG and not run_inspector(cwd, value, stages_optimisation):
+            print(f"There was a problem in EVALUATION stage {name}")
             return 1
         walker.set_done(ind)
         set_stage_done(name, cwd_rel)

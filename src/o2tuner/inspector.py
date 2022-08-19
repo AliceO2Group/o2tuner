@@ -21,43 +21,36 @@ from o2tuner.backends import load_or_create_study
 from o2tuner.sampler import construct_sampler
 
 
-class OptunaInspector:
+class O2TunerInspector:
     """
     Inspect optuna study
     """
 
-    def __init__(self, config_path=None):
+    def __init__(self):
         """
         Constructor
         """
         self._study = None
-        self._config_path = config_path
-        self._config = None
         self._importances = None
+        self._opt_user_config = None
 
-    def load_impl(self, config_path):
-        """
-        Implementation of loading a study
-        """
-        config = parse_yaml(config_path)
-        sampler = construct_sampler(config.get("sampler", None))
-        storage = config.get("study", {})
-        self._study = load_or_create_study(storage.get("name"), storage.get("storage"), sampler)
-        self._config = config
-        importances = get_param_importances(self._study, evaluator=None, params=None, target=None)
-        self._importances = OrderedDict(reversed(list(importances.items())))
-
-    def load(self, config_path=None):
+    def load(self, opt_config=None, opt_work_dir=None, opt_user_config=None):
         """
         Loading wrapper
         """
-        if not config_path and not self._config_path:
+        if not opt_config and not opt_work_dir:
             print("WARNING: Nothing to load, no configuration given")
             return False
-        if config_path:
-            self.load_impl(config_path)
-        else:
-            self.load_impl(self._config_path)
+        if isinstance(opt_config, str):
+            opt_config = parse_yaml(opt_config)
+        if not opt_config:
+            opt_config = {}
+        sampler = construct_sampler(opt_config.get("sampler", None))
+        storage = opt_config.get("study", {})
+        _, self._study = load_or_create_study(storage.get("name", None), storage.get("storage", None), sampler, opt_work_dir)
+        self._opt_user_config = opt_user_config
+        importances = get_param_importances(self._study, evaluator=None, params=None, target=None)
+        self._importances = OrderedDict(reversed(list(importances.items())))
         return True
 
     def get_annotation_per_trial(self, key, accept_missing_annotation=True):

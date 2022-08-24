@@ -15,7 +15,7 @@ def run_command(cmd, *, cwd="./", log_file=None, wait=True):
     """
     if log_file is None:
         log_file = "log.log"
-    cmd = f"{cmd}>{log_file} 2>&1"
+    cmd = f"{cmd} >{log_file} 2>&1"
     print(f"Running command {cmd}")
     proc = psutil.Popen(["/bin/bash", "-c", cmd], cwd=cwd)
     if wait:

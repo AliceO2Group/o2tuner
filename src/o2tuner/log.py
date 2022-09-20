@@ -29,13 +29,13 @@ class Log(object):
         sys.stderr.flush()
 
     def debug(self, msg):
-        self.print_color(colorama.Fore.MAGENTA, msg)
+        self.print_color(colorama.Fore.MAGENTA, "[DEBUG]: " + msg)
 
     def info(self, msg):
-        self.print_color(colorama.Fore.GREEN, msg)
+        self.print_color(colorama.Fore.GREEN, "[INFO]: " + msg)
 
     def warning(self, msg):
-        self.print_color(colorama.Fore.YELLOW, msg)
+        self.print_color(colorama.Fore.YELLOW, "[WARNING]: " + msg)
 
     def error(self, msg):
-        self.print_color(colorama.Fore.RED, msg)
+        self.print_color(colorama.Fore.RED, "[ERROR]: " + msg)

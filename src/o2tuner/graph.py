@@ -3,7 +3,9 @@ Useful classes to define and walk through directed acyclic graphs
 """
 
 import sys
+from o2tuner.log import Log
 
+LOG = Log()
 
 class GraphDAG:  # pylint: disable=too-few-public-methods
     """
@@ -45,7 +47,7 @@ class GraphDAG:  # pylint: disable=too-few-public-methods
             self.graph[origin][target] = True
 
             if origin > n_nodes or target > n_nodes or origin < 0 or target < 0:
-                print(f"ERROR: Found edge ({origin}, {target}) but nodes must be >= 0 and < {n_nodes}")
+                LOG.error(f"Found edge ({origin}, {target}) but nodes must be >= 0 and < {n_nodes}")
                 sys.exit(1)
             self.from_nodes[target].append(origin)
             self.to_nodes[origin].append(target)
@@ -66,14 +68,14 @@ class GraphDAG:  # pylint: disable=too-few-public-methods
         in_degree = self.in_degree.copy()
         queue = [i for i, v in enumerate(in_degree) if not v]
         if not queue:
-            print("ERROR: There is no source node in the topology")
+            LOG.error("There is no source node in the topology")
             return False
 
         counter = 0
         while queue:
             current = queue.pop(0)
             if current >= self.n_nodes or current < 0:
-                print(f"ERROR: Found an edge which node {current} but nodes are only valid from 0 to {self.n_nodes - 1}.")
+                LOG.error(f"Found an edge which node {current} but nodes are only valid from 0 to {self.n_nodes - 1}.")
                 return False
             self.topology.append(current)
             for target in self.to_nodes[current]:
@@ -82,7 +84,7 @@ class GraphDAG:  # pylint: disable=too-few-public-methods
                     queue.append(target)
             counter += 1
         if counter != self.n_nodes:
-            print("ERROR: There is at least one cyclic dependency.")
+            LOG.error("There is at least one cyclic dependency.")
             return False
         return True
 

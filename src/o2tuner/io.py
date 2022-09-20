@@ -9,10 +9,10 @@ from shutil import rmtree
 import json
 import yaml
 
+from o2tuner.log import Log
 
-############################
-# STANDARD FILE SYSTEM I/O #
-############################
+LOG = Log()
+
 def exists_file(path):
     """wrapper around python's os.path.isfile
 
@@ -34,11 +34,11 @@ def make_dir(path):
     """
     if exists(path):
         if exists_file(path):
-            # if exists and if that is actually a file instead of a directory, fail here...
-            print(f"Attempted to create directory {path}. However, a file seems to exist there, quitting")
+            # if it exists and if that is actually a file instead of a directory, fail here...
+            LOG.error(f"Attempted to create directory {path}. However, a file seems to exist there, quitting")
             sys.exit(1)
             # ...otherwise just warn.
-        print(f"WARNING: The directory {path} already exists, not overwriting")
+        LOG.warning(f"The directory {path} already exists, not overwriting")
         return
     # make the whole path structure
     makedirs(path)
@@ -105,7 +105,7 @@ def parse_yaml(path):
         with open(path, encoding="utf8") as in_file:
             return yaml.safe_load(in_file)
     except (OSError, IOError, yaml.YAMLError) as exc:
-        print(f"ERROR: Cannot parse YAML from {path} due to\n{exc}")
+        LOG.error(f"ERROR: Cannot parse YAML from {path} due to\n{exc}")
         sys.exit(1)
 
 
@@ -121,7 +121,7 @@ def dump_yaml(to_yaml, path, *, no_refs=False):
             else:
                 yaml.safe_dump(to_yaml, out_file)
     except (OSError, IOError, yaml.YAMLError) as eexc:
-        print(f"ERROR: Cannot write YAML to {path} due to\n{eexc}")
+        LOG.error(f"ERROR: Cannot write YAML to {path} due to\n{eexc}")
         sys.exit(1)
 
 
@@ -134,7 +134,7 @@ def parse_json(filepath):
     """
     filepath = expanduser(filepath)
     if not exists_file(filepath):
-        print(f"ERROR: JSON file {filepath} does not exist.")
+        LOG.error(f"ERROR: JSON file {filepath} does not exist.")
         sys.exit(1)
     with open(filepath, "r", encoding="utf8") as config_file:
         return json.load(config_file)

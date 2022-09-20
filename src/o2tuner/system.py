@@ -6,6 +6,10 @@ from os.path import join, abspath
 import importlib
 import psutil
 
+from o2tuner.log import Log
+
+LOG = Log()
+
 LOADED_MODULES = {}
 
 
@@ -16,7 +20,7 @@ def run_command(cmd, *, cwd="./", log_file=None, wait=True):
     if log_file is None:
         log_file = "log.log"
     cmd = f"{cmd} >{log_file} 2>&1"
-    print(f"Running command {cmd}")
+    LOG.info(f"Running command {cmd}")
     proc = psutil.Popen(["/bin/bash", "-c", cmd], cwd=cwd)
     if wait:
         proc.wait()
@@ -32,7 +36,7 @@ def load_file_as_module(path, module_name):
         return LOADED_MODULES[lookup_key].__name__
 
     if module_name in sys.modules:
-        print(f"ERROR: Module name {module_name} already present, cannot load")
+        LOG.error(f"Module name {module_name} already present, cannot load")
         sys.exit(1)
     spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
@@ -45,7 +49,7 @@ def load_file_as_module(path, module_name):
 def import_function_from_module(module_name, function_name):
     module = importlib.import_module(module_name)
     if not hasattr(module, function_name):
-        print(f"ERROR: Cannot find function {function_name} in module {module.__name__}")
+        LOG.error(f"Cannot find function {function_name} in module {module.__name__}")
         sys.exit(1)
     return getattr(module, function_name)
 

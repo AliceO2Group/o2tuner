@@ -22,7 +22,7 @@ class O2TunerArgumentParser(argparse.ArgumentParser):
         self.args_normal = []
         super().__init__(formatter_class=argparse.RawTextHelpFormatter)
         super().add_argument("-v", "--version", dest="version", default=False, action="store_true",
-                             help="Print current alidock version on stdout")
+                             help="Print current o2tuner version on stdout")
         super().add_argument("-q", "--quiet", dest="quiet", default=False,
                              action="store_true", help="Do not print any message")
         super().add_argument("-d", "--debug", dest="debug", default=None,

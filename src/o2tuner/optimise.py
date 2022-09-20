@@ -14,6 +14,7 @@ from o2tuner.log import Log
 
 LOG = Log()
 
+
 def optimise_run(objective, optuna_storage_config, sampler, n_trials, work_dir, user_config, run_serial):
     """
     Run one of those per job

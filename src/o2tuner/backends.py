@@ -16,6 +16,7 @@ from o2tuner.log import Log
 
 LOG = Log()
 
+
 def make_trial_directory(trial):
     """
     Make a directory and attach to trial object as user attribute
@@ -147,7 +148,7 @@ class OptunaHandler(object):
         if hasattr(objective, "needs_cwd"):
             self._needs_cwd_per_trial = True
         if n_params > 2 or not n_params:
-            LOG.error("Invalid signature of objective funtion. Need either 1 argument (only trial object) or 2 arguments (trial object and user_config)")
+            LOG.error("Invalid signature of objective funtion. Need either 1 argument (only trial obj) or 2 arguments (trial object + user_config)")
             sys.exit(1)
         if n_params == 1:
             self._objective = objective

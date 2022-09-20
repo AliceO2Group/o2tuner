@@ -10,6 +10,7 @@ from o2tuner.log import Log
 
 LOG = Log()
 
+
 class O2TunerError(Exception):
     """
     O2Tuner error class

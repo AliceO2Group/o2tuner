@@ -3,10 +3,7 @@ Module to process command line arguments
 """
 
 
-import os.path
 import argparse
-from collections import namedtuple
-import yaml
 
 
 class O2TunerArgumentParser(argparse.ArgumentParser):

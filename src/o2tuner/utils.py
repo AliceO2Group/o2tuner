@@ -7,6 +7,7 @@ from o2tuner.log import Log
 
 LOG = Log()
 
+
 def annotate_trial(trial, key, value):
     """
     Annotate a trial object with user key-value pair

@@ -5,7 +5,7 @@ o2tuner main module
 import sys
 from pkg_resources import require
 from o2tuner.argumentparser import O2TunerArgumentParser
-from o2tuner.tuner import O2Tuner, O2TunerError
+from o2tuner.tuner import O2TunerError
 from o2tuner.log import Log
 from o2tuner.run import run
 

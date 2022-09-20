@@ -1,12 +1,14 @@
 """
-Configuration functinality and parsing
+Configuration functionality and parsing
 """
+import dataclasses
 from os.path import join, basename, abspath
 from glob import glob
 
 from o2tuner.io import make_dir, parse_yaml, exists_dir
 
 
+@dataclasses.dataclass
 class WorkDir:
     """
     Use this object to set the working directory globally

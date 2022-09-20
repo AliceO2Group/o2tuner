@@ -13,6 +13,7 @@ from o2tuner.log import Log
 
 LOG = Log()
 
+
 def exists_file(path):
     """wrapper around python's os.path.isfile
 

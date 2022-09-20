@@ -1,3 +1,6 @@
+"""
+Utility to run stages, bound to main entrypoint run action
+"""
 import sys
 import argparse
 from os.path import join, abspath, expanduser

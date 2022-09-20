@@ -1,15 +1,13 @@
 """
-Constrcut and manage samplers
+Construct and manage samplers
 """
-
 import sys
-
+# NOTE: There are more sampler implemented in optuna, however, let's start with these
+from optuna.samplers import BaseSampler, GridSampler, RandomSampler, TPESampler, NSGAIISampler
 from o2tuner.log import Log
 
 LOG = Log()
 
-# NOTE There are more smapler implemented in optuna, however, let's start with these
-from optuna.samplers import BaseSampler, GridSampler, RandomSampler, TPESampler, NSGAIISampler
 
 SAMPLERS = {"base": BaseSampler,
             "grid": GridSampler,

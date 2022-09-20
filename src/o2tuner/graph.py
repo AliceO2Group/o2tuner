@@ -7,6 +7,7 @@ from o2tuner.log import Log
 
 LOG = Log()
 
+
 class GraphDAG:  # pylint: disable=too-few-public-methods
     """
     Class storing the configuration of a directed acyclic graph

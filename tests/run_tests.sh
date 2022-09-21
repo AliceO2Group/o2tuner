@@ -33,9 +33,9 @@ test-flake8() {
 
 test-pytest() {
     test-setup
-    pinfo "running test: pytest"
+    perr "running test: pytest is now disabled"
     type pytest
-    pytest -x tests
+    # pytest -x tests
 }
 
 test-all() {

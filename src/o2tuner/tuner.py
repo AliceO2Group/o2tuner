@@ -8,7 +8,6 @@ import yaml
 from yaml import YAMLError
 from o2tuner.log import Log
 
-
 LOG = Log()
 
 
@@ -27,7 +26,7 @@ class O2TunerError(Exception):
 
 class O2Tuner(object):
     """
-    Steering class for tuning
+    Steering class for O2tuner
     """
 
     def __init__(self, handler) -> None:
@@ -39,6 +38,9 @@ class O2Tuner(object):
         return {"executable": "/bin/true"}
 
     def parse_config(self):
+        """
+        Open configuration file and reset inner configuration
+        """
         conf_file = os.path.join(os.path.expanduser("~"),
                                  ".o2tuner-config.yaml")
         try:
@@ -50,6 +52,9 @@ class O2Tuner(object):
             pass
 
     def override_config(self, override):
+        """
+        Override inner configuration with provided one if keys exists
+        """
         if not override:
             return
         for k in self._conf:

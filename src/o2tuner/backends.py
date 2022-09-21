@@ -12,6 +12,9 @@ import optuna
 
 from o2tuner.io import make_dir, exists_file
 from o2tuner.utils import annotate_trial
+from o2tuner.log import Log
+
+LOG = Log()
 
 
 def make_trial_directory(trial):
@@ -20,10 +23,10 @@ def make_trial_directory(trial):
     """
     user_attributes = trial.user_attrs
     if "cwd" in user_attributes:
-        print(f"ERROR: This trial has already a directory attached: {user_attributes['cwd']}")
+        LOG.error(f"This trial has already a directory attached: {user_attributes['cwd']}")
         sys.exit(1)
     if "cwd" not in trial.study.user_attrs:
-        print("ERROR: This optimisation was not configured to run inside a directory. Please define a working directory.")
+        LOG.error("This optimisation was not configured to run inside a directory. Please define a working directory.")
         sys.exit(1)
     top_dir = trial.study.user_attrs["cwd"]
     timestamp = str(int(time() * 1000000))
@@ -44,14 +47,14 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=No
         # we force a name to be given by the user for those cases
         try:
             study = optuna.load_study(study_name=study_name, storage=storage, sampler=sampler)
-            print(f"Loading existing study {study_name} from storage {storage}")
+            LOG.info(f"Loading existing study {study_name} from storage {storage}")
         except KeyError:
             study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
-            print(f"Creating new study {study_name} at storage {storage}")
+            LOG.info(f"Creating new study {study_name} at storage {storage}")
         except ImportError as exc:
             # Probably cannot import MySQL stuff
-            print("Probably cannot import what is needed for database access. Will try to attempt a serial run.")
-            print(exc)
+            LOG.info("Probably cannot import what is needed for database access. Will try to attempt a serial run.")
+            LOG.info(exc)
         else:
             return True, study
     # This is a "one-time" in-memory study so we don't care so much for the name honestly, could be None
@@ -61,7 +64,7 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=No
         file_name = join(workdir, f"{study_name}.pkl")
         if exists_file(file_name):
             with open(file_name, "rb") as save_file:
-                print(f"Loading existing study {study_name} from file {file_name}")
+                LOG.info(f"Loading existing study {study_name} from file {file_name}")
                 return False, pickle.load(save_file)
 
     return False, optuna.create_study(study_name=study_name, sampler=sampler)
@@ -130,7 +133,7 @@ class OptunaHandler(object):
 
     def optimise(self):
         if not self._n_trials or not self._objective:
-            print("ERROR: Not initialised: Number of trials and objective function need to be set")
+            LOG.error("Not initialised: Number of trials and objective function need to be set")
             return
         self._study.optimize(self.objective_wrapper, n_trials=self._n_trials)
 
@@ -145,7 +148,7 @@ class OptunaHandler(object):
         if hasattr(objective, "needs_cwd"):
             self._needs_cwd_per_trial = True
         if n_params > 2 or not n_params:
-            print("Invalid signature of objective funtion. Need either 1 argument (only trial object) or 2 arguments (trial object and user_config)")
+            LOG.error("Invalid signature of objective funtion. Need either 1 argument (only trial obj) or 2 arguments (trial object + user_config)")
             sys.exit(1)
         if n_params == 1:
             self._objective = objective

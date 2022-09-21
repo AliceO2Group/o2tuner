@@ -10,6 +10,9 @@ import functools
 from o2tuner.io import make_dir, parse_yaml
 from o2tuner.backends import OptunaHandler
 from o2tuner.sampler import construct_sampler
+from o2tuner.log import Log
+
+LOG = Log()
 
 
 def optimise_run(objective, optuna_storage_config, sampler, n_trials, work_dir, user_config, run_serial):
@@ -45,7 +48,7 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
     run_serial = False
     if not optuna_storage_config.get("name", None) or not optuna_storage_config.get("storage", None):
         # we reduce the number of jobs to 1. Either missing the table name or the storage path will anyway always lead to a new study
-        print("INFO: No storage provided, running only one job.")
+        LOG.info("No storage provided, running only one job.")
         run_serial = True
         jobs = 1
 
@@ -54,7 +57,7 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
     # add the left-over trials simply to the last job for now
     trials_list[-1] += trials - sum(trials_list)
 
-    print(f"Number of jobs: {jobs}\nNumber of trials: {trials}")
+    LOG.info(f"Number of jobs: {jobs}\nNumber of trials: {trials}")
 
     sampler = construct_sampler(optuna_config.get("sampler", None))
 

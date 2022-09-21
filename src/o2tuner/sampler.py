@@ -1,11 +1,13 @@
 """
-Constrcut and manage samplers
+Construct and manage samplers
 """
-
 import sys
-
-# NOTE There are more smapler implemented in optuna, however, let's start with these
+# NOTE: There are more sampler implemented in optuna, however, let's start with these
 from optuna.samplers import BaseSampler, GridSampler, RandomSampler, TPESampler, NSGAIISampler
+from o2tuner.log import Log
+
+LOG = Log()
+
 
 SAMPLERS = {"base": BaseSampler,
             "grid": GridSampler,
@@ -19,7 +21,7 @@ def construct_sampler(sampler_config=None):
         return TPESampler()
     name = sampler_config.get("name").lower()
     if name not in SAMPLERS:
-        print(f"ERROR: Unknwon sampler {name}")
+        LOG.error(f"Unknwon sampler {name}")
         sys.exit(1)
     # NOTE Only YAMLable arguments can be used for this of course. We need to find a way to pass more complex things.
     #      E.g. some samplers take lambda function/callables etc.

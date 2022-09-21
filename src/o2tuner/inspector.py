@@ -19,6 +19,9 @@ from optuna.study._study_direction import StudyDirection
 from o2tuner.io import parse_yaml
 from o2tuner.backends import load_or_create_study
 from o2tuner.sampler import construct_sampler
+from o2tuner.log import Log
+
+LOG = Log()
 
 
 class O2TunerInspector:
@@ -39,7 +42,7 @@ class O2TunerInspector:
         Loading wrapper
         """
         if not opt_config and not opt_work_dir:
-            print("WARNING: Nothing to load, no configuration given")
+            LOG.warning("Nothing to load, no configuration given")
             return False
         if isinstance(opt_config, str):
             opt_config = parse_yaml(opt_config)
@@ -63,7 +66,7 @@ class O2TunerInspector:
         for trial in self._study.trials:
             user_attrs = trial.user_attrs
             if key not in user_attrs:
-                print(f"ERROR: Key {key} not in trial number {trial.number}.")
+                LOG.error(f"Key {key} not in trial number {trial.number}.")
                 sys.exit(1)
             ret_list.append(user_attrs[key])
         return ret_list
@@ -89,7 +92,7 @@ class O2TunerInspector:
 
         However, add some functionality we would like to have here
         """
-        print("Plotting importance")
+        LOG.info("Plotting importance")
         param_names, importance_values = self.get_most_important(n_most_important)
 
         if map_params:
@@ -108,7 +111,7 @@ class O2TunerInspector:
         """
         Plot parallel coordinates. Each horizontal line represents a trial, each vertical line a parameter
         """
-        print("Plotting parallel coordinates")
+        LOG.info("Plotting parallel coordinates")
         params, _ = self.get_most_important(n_most_important)
 
         curves = [[] for _ in self._study.trials]
@@ -159,7 +162,7 @@ class O2TunerInspector:
         return figure, axes
 
     def plot_slices(self, *, n_most_important=21, map_params=None):
-        print("Plotting slices")
+        LOG.info("Plotting slices")
         params, _ = self.get_most_important(n_most_important)
 
         n_rows = ceil(sqrt(len(params)))
@@ -204,7 +207,7 @@ class O2TunerInspector:
         """
         Plot correlation among parameters
         """
-        print("Plotting parameter correlations")
+        LOG.info("Plotting parameter correlations")
         params, _ = self.get_most_important(n_most_important)
         params_labels = params
         if map_params:
@@ -247,7 +250,7 @@ class O2TunerInspector:
         """
         Plot correlation among parameters
         """
-        print("Plotting pair-wise scatter")
+        LOG.info("Plotting pair-wise scatter")
         params, _ = self.get_most_important(n_most_important)
         params_labels = params
         if map_params:

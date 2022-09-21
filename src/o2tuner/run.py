@@ -85,7 +85,7 @@ def run_optimisation(cwd, name, config):
     this_dir = getcwd()
     # change to this cwd and afterwards back
     chdir(cwd)
-    ret = optimise(func, optuna_config, work_dir=cwd, user_config=user_config)
+    ret = optimise(func, optuna_config, work_dir="./", user_config=user_config)
     chdir(this_dir)
     return ret
 

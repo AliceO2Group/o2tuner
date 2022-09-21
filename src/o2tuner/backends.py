@@ -36,11 +36,27 @@ def make_trial_directory(trial):
     return cwd
 
 
+def adjust_path_sqlite(storage, workdir):
+    """
+    Make sure the path for SQLite is located either at an absolute path or relative to the specified workdir
+    """
+    if not storage:
+        return None
+    if storage.find("sqlite:///") != 0 or not workdir:
+        return storage
+    path = storage[10:]
+    if path[0] == "/":
+        # Absolute path
+        return storage
+    return "sqlite:///" + join(workdir, path)
+
+
 def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=None):
     """
     Helper to load or create a study
     Returns tuple of whether it can run via DB interface and optuna.study.study.Study
     """
+    storage = adjust_path_sqlite(storage, workdir)
     if study_name and storage:
         # there is a database we can connect to for multiprocessing
         # Although optuna would come up with a unique name when study_name is None,
@@ -48,16 +64,16 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=No
         try:
             study = optuna.load_study(study_name=study_name, storage=storage, sampler=sampler)
             LOG.info(f"Loading existing study {study_name} from storage {storage}")
+            return True, study
         except KeyError:
             study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
             LOG.info(f"Creating new study {study_name} at storage {storage}")
+            return True, study
         except ImportError as exc:
             # Probably cannot import MySQL stuff
             LOG.info("Probably cannot import what is needed for database access. Will try to attempt a serial run.")
             LOG.info(exc)
-        else:
-            return True, study
-    # This is a "one-time" in-memory study so we don't care so much for the name honestly, could be None
+
     if study_name and workdir:
         # Try to see if there is a study saved here
         # Pickling is unsafe, we should try to find another way eventually

@@ -12,7 +12,7 @@ from setuptools import setup, find_packages
 
 class Setup():
     """
-    Convenience wrapper (for C.I. purposes) of the `setup()` call form `setuptools`.
+    Convenience wrapper (for C.I. purposes) of the `setup()` call from `setuptools`.
     """
 
     def __init__(self, **kw):
@@ -58,7 +58,7 @@ SETUP = Setup(
     name="o2tuner",
 
     # LAST-TAG is a placeholder. Automatically replaced at deploy time with the right tag
-    version="0.0.1",
+    version="0.0.2",
 
     description="Minimal heavy ion physics environment for Machine Learning",
 

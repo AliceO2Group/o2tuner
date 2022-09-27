@@ -16,7 +16,7 @@ import pandas as pd
 from optuna.importance import get_param_importances
 from optuna.study._study_direction import StudyDirection
 
-from o2tuner.io import parse_yaml
+from o2tuner.io import parse_yaml, dump_yaml
 from o2tuner.backends import load_or_create_study
 from o2tuner.sampler import construct_sampler
 from o2tuner.log import Log
@@ -55,6 +55,20 @@ class O2TunerInspector:
         importances = get_param_importances(self._study, evaluator=None, params=None, target=None)
         self._importances = OrderedDict(reversed(list(importances.items())))
         return True
+
+    def write_summary(self, filepath="o2tuner_optimisation_summary.yaml"):
+        """
+        Write a short summary to YAML file
+        """
+        LOG.info(f"Writing optimisation summary to {filepath}")
+        best_trial = self._study.best_trial
+        user_attrs = best_trial.user_attrs
+        to_write = {"n_trials": len(self._study.trials),
+                    "best_trial_cwd": user_attrs.get("cwd", "./"),
+                    "best_trial_number": best_trial.number,
+                    "best_trial_loss": self._study.best_value,
+                    "best_trial_parameters": self._study.best_params}
+        dump_yaml(to_write, filepath)
 
     def get_annotation_per_trial(self, key, accept_missing_annotation=True):
         """

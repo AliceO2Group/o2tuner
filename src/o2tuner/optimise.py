@@ -52,6 +52,10 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
         run_serial = True
         jobs = 1
 
+    if trials < jobs:
+        LOG.info(f"Attempt to do {trials} trials, hence reducing the number of jobs from {jobs} to {trials}")
+        jobs = trials
+
     trials_list = floor(trials / jobs)
     trials_list = [trials_list] * jobs
     # add the left-over trials simply to the last job for now

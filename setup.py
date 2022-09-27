@@ -57,10 +57,9 @@ class Setup():
 SETUP = Setup(
     name="o2tuner",
 
-    # LAST-TAG is a placeholder. Automatically replaced at deploy time with the right tag
     version="0.0.2",
 
-    description="Minimal heavy ion physics environment for Machine Learning",
+    description="Optimisation of ALICE tasks in a all-in-one package",
 
     url="https://github.com/mconcas/o2tuner",
     author="mconcas",

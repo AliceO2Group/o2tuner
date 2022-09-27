@@ -10,6 +10,7 @@ import functools
 from o2tuner.io import make_dir, parse_yaml
 from o2tuner.backends import OptunaHandler
 from o2tuner.sampler import construct_sampler
+from o2tuner.inspector import O2TunerInspector
 from o2tuner.log import Log
 
 LOG = Log()
@@ -79,6 +80,10 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
             break
         # We assume here that the optimisation might take some time, so we can sleep for a bit
         sleep(10)
+
+    insp = O2TunerInspector()
+    insp.load(optuna_config, work_dir, user_config)
+    insp.write_summary()
     return True
 
 

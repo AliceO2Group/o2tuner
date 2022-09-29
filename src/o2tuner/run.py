@@ -167,6 +167,8 @@ def run_stages(config, which_stages):  # noqa: C901 pylint: disable=too-many-bra
         if "deps" not in stage[1]:
             continue
         for dep in stage[1]["deps"]:
+            if dep not in stage[1]["deps"]:
+                LOG.error(f"Unknown dependency {dep}")
             origin = stages_name_to_id[dep]
             edges.append((origin, target))
 
@@ -177,6 +179,10 @@ def run_stages(config, which_stages):  # noqa: C901 pylint: disable=too-many-bra
         which_stages = []
     for name in which_stages:
         # These will always have precedence over "done" status
+        if name not in stages_name_to_id:
+            print(stages_name_to_id)
+            LOG.error(f"Stage {name} is unknown")
+            return 1
         walker.set_to_do(stages_name_to_id[name])
     for name in stages_done:
         walker.set_done(stages_name_to_id[name])

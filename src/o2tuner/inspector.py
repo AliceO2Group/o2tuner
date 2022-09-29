@@ -52,8 +52,6 @@ class O2TunerInspector:
         storage = opt_config.get("study", {})
         _, self._study = load_or_create_study(storage.get("name", None), storage.get("storage", None), sampler, opt_work_dir)
         self._opt_user_config = opt_user_config
-        importances = get_param_importances(self._study, evaluator=None, params=None, target=None)
-        self._importances = OrderedDict(reversed(list(importances.items())))
         return True
 
     def write_summary(self, filepath="o2tuner_optimisation_summary.yaml"):
@@ -92,6 +90,9 @@ class O2TunerInspector:
         return [t.value for t in self._study.trials]
 
     def get_most_important(self, n_most_important=20):
+        if not self._importances:
+            importances = get_param_importances(self._study, evaluator=None, params=None, target=None)
+            self._importances = OrderedDict(reversed(list(importances.items())))
         importance_values = list(self._importances.values())
         param_names = list(self._importances.keys())
         n_most_important = min(n_most_important, len(self._importances))

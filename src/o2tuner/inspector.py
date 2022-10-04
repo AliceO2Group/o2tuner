@@ -15,6 +15,7 @@ import pandas as pd
 
 from optuna.importance import get_param_importances
 from optuna.study._study_direction import StudyDirection
+from optuna.trial import TrialState
 
 from o2tuner.io import parse_yaml, dump_yaml
 from o2tuner.backends import load_or_create_study
@@ -36,6 +37,7 @@ class O2TunerInspector:
         self._study = None
         self._importances = None
         self._opt_user_config = None
+        self._trials_state = None
 
     def load(self, opt_config=None, opt_work_dir=None, opt_user_config=None):
         """
@@ -51,6 +53,7 @@ class O2TunerInspector:
         sampler = construct_sampler(opt_config.get("sampler", None))
         storage = opt_config.get("study", {})
         _, self._study = load_or_create_study(storage.get("name", None), storage.get("storage", None), sampler, opt_work_dir)
+        self._trials_state = self._study.trials_dataframe(("state",))["state"].values
         self._opt_user_config = opt_user_config
         return True
 
@@ -73,7 +76,8 @@ class O2TunerInspector:
         Assemble history of requested annotation
         """
         if accept_missing_annotation:
-            return [t.user_attrs[key] if key in t.user_attrs else None for t in self._study.trials]
+            return [t.user_attrs[key] if key in t.user_attrs else None for t, s in zip(self._study.trials, self._trials_state)
+                    if s == TrialState.COMPLETE.name]
         ret_list = []
         for trial in self._study.trials:
             user_attrs = trial.user_attrs
@@ -87,7 +91,7 @@ class O2TunerInspector:
         """
         Simply return list of losses
         """
-        return [t.value for t in self._study.trials]
+        return [t.value for t, s in zip(self._study.trials, self._trials_state) if s == TrialState.COMPLETE.name]
 
     def get_most_important(self, n_most_important=20):
         if not self._importances:

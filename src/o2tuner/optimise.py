@@ -21,9 +21,9 @@ def optimise_run(objective, optuna_storage_config, sampler, n_trials, work_dir, 
     Run one of those per job
     """
     handler = OptunaHandler(optuna_storage_config.get("name", None), optuna_storage_config.get("storage", None), work_dir, user_config, run_serial)
-    handler.initialise(n_trials)
     handler.set_objective(objective)
     handler.set_sampler(sampler)
+    handler.initialise(n_trials)
     handler.optimise()
     handler.finalise()
     return 0

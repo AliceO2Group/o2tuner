@@ -37,7 +37,7 @@ class O2TunerInspector:
         self._study = None
         self._importances = None
         self._opt_user_config = None
-        self._trials_state = None
+        self._trials_complete = None
 
     def load(self, opt_config=None, opt_work_dir=None, opt_user_config=None):
         """
@@ -53,7 +53,13 @@ class O2TunerInspector:
         sampler = construct_sampler(opt_config.get("sampler", None))
         storage = opt_config.get("study", {})
         _, self._study = load_or_create_study(storage.get("name", None), storage.get("storage", None), sampler, opt_work_dir)
-        self._trials_state = self._study.trials_dataframe(("state",))["state"].values
+        # Use only successfully completed trials
+        trials_state = self._study.trials_dataframe(("state",))["state"].values
+        self._trials_complete = [trial for trial, state in zip(self._study.trials, trials_state) if state == TrialState.COMPLETE.name]
+        # now we sort the trials according to the order in which they were done
+        trial_numbers = [trial.number for trial in self._trials_complete]
+        self._trials_complete = [t for _, t in sorted(zip(trial_numbers, self._trials_complete))]
+
         self._opt_user_config = opt_user_config
         return True
 
@@ -76,10 +82,9 @@ class O2TunerInspector:
         Assemble history of requested annotation
         """
         if accept_missing_annotation:
-            return [t.user_attrs[key] if key in t.user_attrs else None for t, s in zip(self._study.trials, self._trials_state)
-                    if s == TrialState.COMPLETE.name]
+            return [t.user_attrs[key] if key in t.user_attrs else None for t in self._trials_complete]
         ret_list = []
-        for trial in self._study.trials:
+        for trial in self._trials_complete:
             user_attrs = trial.user_attrs
             if key not in user_attrs:
                 LOG.error(f"Key {key} not in trial number {trial.number}.")
@@ -91,7 +96,7 @@ class O2TunerInspector:
         """
         Simply return list of losses
         """
-        return [t.value for t, s in zip(self._study.trials, self._trials_state) if s == TrialState.COMPLETE.name]
+        return [t.value for t in self._trials_complete]
 
     def get_most_important(self, n_most_important=20):
         if not self._importances:
@@ -133,14 +138,14 @@ class O2TunerInspector:
         LOG.info("Plotting parallel coordinates")
         params, _ = self.get_most_important(n_most_important)
 
-        curves = [[] for _ in self._study.trials]
         losses = self.get_losses()
-        skip_trials = []
+        curves = [[] for _ in losses]
+        skip_trials = {}
 
-        for i, trial in enumerate(self._study.trials):
+        for i, trial in enumerate(self._trials_complete):
             for param_key in params:
                 if param_key not in trial.params:
-                    skip_trials.append(i)
+                    skip_trials[i] = True
                     continue
                 curves[i].append(trial.params[param_key])
 
@@ -203,7 +208,7 @@ class O2TunerInspector:
         for param_key, label, ax in zip(params[::-1], params_labels[::-1], axes):
             plot_this = True
             values = []
-            for trial in self._study.trials:
+            for trial in self._trials_complete:
                 if param_key not in trial.params:
                     plot_this = False
                     break
@@ -237,7 +242,7 @@ class O2TunerInspector:
         for param_key, label in zip(params[::-1], params_labels[::-1]):
             plot_this = True
             values = []
-            for trial in self._study.trials:
+            for trial in self._trials_complete:
                 if param_key not in trial.params:
                     plot_this = False
                     break
@@ -280,7 +285,7 @@ class O2TunerInspector:
         for param_key, label in zip(params[::-1], params_labels[::-1]):
             plot_this = True
             values = []
-            for trial in self._study.trials:
+            for trial in self._trials_complete:
                 if param_key not in trial.params:
                     plot_this = False
                     break

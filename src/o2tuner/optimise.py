@@ -5,6 +5,7 @@ Optimise hook, wrapping parallelisation
 from time import sleep
 from math import floor
 from multiprocessing import Process
+from multiprocessing import set_start_method as mp_set_start_method
 import functools
 
 from o2tuner.io import make_dir, parse_yaml
@@ -12,6 +13,9 @@ from o2tuner.backends import OptunaHandler
 from o2tuner.sampler import construct_sampler
 from o2tuner.inspector import O2TunerInspector
 from o2tuner.log import Log
+
+# Do this to run via fork by default on latest iOS
+mp_set_start_method("fork")
 
 LOG = Log()
 

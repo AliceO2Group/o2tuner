@@ -24,6 +24,10 @@ def run_command(cmd, *, cwd="./", log_file=None, wait=True):
     proc = psutil.Popen(["/bin/bash", "-c", cmd], cwd=cwd)
     if wait:
         proc.wait()
+        if ret := proc.returncode:
+            # check the return code and exit if != 0
+            LOG.error("There seems to have been a problem with the process launched with {cmd}. Its exit code was {ret}.")
+            sys.exit(ret)
     return proc, join(cwd, log_file)
 
 

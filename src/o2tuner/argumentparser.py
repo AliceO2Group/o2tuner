@@ -21,6 +21,7 @@ class O2TunerArgumentParser(argparse.ArgumentParser):
         super().add_argument("-w", "--workdir", dest="work_dir", help="Working directory to run in",
                              required=True)
         super().add_argument("-c", "--config", help="your configuration", required=True)
+        super().add_argument("--script-dir", dest="script_dir", help="directory containing your scripts and python code")
         super().add_argument("-q", "--quiet", dest="quiet", default=False,
                              action="store_true", help="Do not print any message")
         super().add_argument("-d", "--debug", dest="debug", default=None,

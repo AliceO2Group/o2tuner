@@ -5,6 +5,7 @@ import sys
 import dataclasses
 from os.path import join, basename, abspath
 from glob import glob
+from copy import deepcopy
 
 from o2tuner.io import make_dir, parse_yaml, exists_dir
 from o2tuner.log import Log
@@ -47,6 +48,8 @@ class Configuration:
     """
     def __init__(self, user_config, script_dir=None):
         self.user_config_dict = parse_yaml(user_config) if isinstance(user_config, str) else user_config
+        # We could do a deepcopy now here in order to do some internal adjustments. However, there still seem to be references left in the
+        # copied dictionary which seems to be rather weird. See also the long comment below.
         self.script_dir = script_dir
         self.all_stages = None
         if not self.setup():
@@ -71,7 +74,13 @@ class Configuration:
         for csk in CONFIG_STAGES_KEYS:
             if csk not in config:
                 continue
-            for name, value in config[csk].items():
+            for name in config[csk]:
+                # I am not sure yet why we have to a deepcopy here. If we do it on the whole dictionary, there seem to be references left still
+                # which seems weird. That has to be understood.
+                # So when not doing this here, it can happen that - if certain stages below share the same references - we don't see what we expect,
+                # in particular when adjusting file paths etc.
+                config[csk][name] = deepcopy(config[csk][name])
+                value = config[csk][name]
                 value["cwd"] = value.get("cwd", name)
                 value["config"] = value.get("config", {})
                 all_deps.extend(value.get("deps", []))
@@ -86,10 +95,8 @@ class Configuration:
 
                 if csk == CONFIG_STAGES_OPTIMISATION_KEY:
                     optuna_config = {k: v for k, v in value.items() if k not in ("entrypoint", "file", "config")}
-                    if "study" not in optuna_config:
-                        optuna_config["study"] = {"name": name}
-                    if "name" not in optuna_config["study"]:
-                        optuna_config["study"]["name"] = name
+                    optuna_config["study"] = optuna_config.get("study", {"name": name})
+                    optuna_config["study"]["name"] = optuna_config["study"].get("name", name)
                     value["optuna_config"] = optuna_config
 
                 if csk == CONFIG_STAGES_EVALUATION_KEY:
@@ -109,6 +116,9 @@ class Configuration:
                             LOG.error(f"Need \"file\" as well as \"entrypoint\" for user stage {name}")
                             has_error = True
                             continue
+                        # See long comment above. E.g. here could be problems if we don't deepcopy
+                        # (but again, we cannot deepcopy the overall self.user_config_dict
+                        value["python"]["file"] = join(self.script_dir, value["python"]["file"])
 
                 self.all_stages.append((name, value, csk))
 

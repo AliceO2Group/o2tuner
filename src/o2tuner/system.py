@@ -59,5 +59,6 @@ def import_function_from_module(module_name, function_name):
 
 
 def import_function_from_file(path, function_name):
+    path = abspath(path)
     module_name = load_file_as_module(path, path.replace("/", "_").replace(".", "_"))
     return import_function_from_module(module_name, function_name)

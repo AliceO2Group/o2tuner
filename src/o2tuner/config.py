@@ -138,7 +138,7 @@ class Configuration:
         if stage_key not in CONFIG_STAGES_KEYS:
             LOG.error(f"Unknown stage key {stage_key}")
             sys.exit(1)
-        return [stage for stage in self.all_stages if stage[2] == stage_key]
+        return {stage[0]: stage[1] for stage in self.all_stages if stage[2] == stage_key}
 
     def get_stages_optimisation(self):
         """

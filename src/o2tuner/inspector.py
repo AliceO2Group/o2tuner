@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mplc
 import matplotlib.cm as mplcm
 import matplotlib.colorbar as mplcb
+from matplotlib.lines import Line2D
 import seaborn as sns
 import pandas as pd
 
@@ -306,3 +307,73 @@ class O2TunerInspector:
         figure.suptitle("Pair-wise scatter plot", fontsize=40)
 
         return figure, ax
+
+    def plot_loss_feature_history(self, *, n_most_important=20, map_params=None):
+        """
+        Plot parameter and loss history and add correlation of each parameter and loss
+        """
+        LOG.info("Plot loss and feature history")
+        params, _ = self.get_most_important(n_most_important)
+        params_labels = params
+        if map_params:
+            params_labels = [map_params[pn] if pn in map_params else pn for pn in params]
+
+        # find the trials where the loss got better for the first time
+        losses = self.get_losses()
+        better_iterations = [0]
+        current_best = losses[0]
+        for i, loss in enumerate(losses[1:], start=1):
+            if loss < current_best:
+                current_best = loss
+                better_iterations.append(i)
+
+        param_values = []
+        params_plot = []
+        for param_key, label in zip(params[::-1], params_labels[::-1]):
+            plot_this = True
+            values = []
+            for trial in self._trials_complete:
+                if param_key not in trial.params:
+                    plot_this = False
+                    break
+                values.append(trial.params[param_key])
+            if not plot_this:
+                continue
+            param_values.append(values)
+            params_plot.append(label)
+
+        param_values.append(losses)
+        params_plot.append("loss")
+        params_labels.append("loss")
+        df = pd.DataFrame(list(zip(*param_values)), columns=params_plot)
+
+        # compute correlations and get "loss" column which has the data interesting for us
+        corr_loss = df.corr()["loss"].values
+        x_axis = range(len(param_values[0]))
+
+        # Set up the matplotlib figure
+        figure, axes = plt.subplots(n_most_important + 2, 1, sharex=True, figsize=(20, 40))
+        axes = axes.flatten()
+        for i, (ax, name, values, corr) in enumerate(zip(axes, params_labels, param_values, corr_loss)):
+            title = f"{name}, correlation with loss: {corr}"
+            color = "tab:blue"
+            if i == len(axes) - 2:
+                title = "loss"
+                color = "black"
+
+            ax.plot(x_axis, values, linewidth=2, color=color)
+            ax.plot(better_iterations, [values[i] for i in better_iterations], color="tab:orange", linestyle="--", linewidth=2)
+            ax.set_xlabel("iteration", fontsize=20)
+            if abs(max(values) / min(values)) > 10:
+                ax.set_yscale("log")
+            ax.set_ylabel("value", fontsize=20)
+            ax.tick_params("both", labelsize=20)
+            ax.set_title(title, fontsize=20)
+
+        legend_lines = [Line2D([0], [0], color="black", lw=2),
+                        Line2D([0], [0], color="black", lw=2, ls="--")]
+
+        axes[-1].legend(legend_lines, ["value", "value at next best loss"], loc="center", ncol=2, mode="expand", fontsize=20)
+        axes[-1].axis("off")
+
+        return figure, axes

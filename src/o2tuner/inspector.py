@@ -299,7 +299,7 @@ class O2TunerInspector:
         df = pd.DataFrame(list(zip(*param_values)), columns=params_plot)
 
         # Draw the heatmap with the mask and correct aspect ratio
-        ax = sns.pairplot(df, height=1.8, aspect=1.8, plot_kws=dict(edgecolor="k", linewidth=0.5), diag_kind="kde", diag_kws=dict(shade=True),
+        ax = sns.pairplot(df, height=1.8, aspect=1.8, plot_kws={"edgecolor": "k", "linewidth": 0.5}, diag_kind="kde", diag_kws={"shade": True},
                           corner=True)
         figure = ax.figure
         figure.set_figheight(30)

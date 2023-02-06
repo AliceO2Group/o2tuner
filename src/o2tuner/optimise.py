@@ -20,13 +20,13 @@ mp_set_start_method("fork")
 LOG = Log()
 
 
-def optimise_run(objective, optuna_storage_config, sampler, n_trials, work_dir, user_config, run_serial):
+def optimise_run(objective, optuna_storage_config, sampler_config, n_trials, work_dir, user_config, run_serial):
     """
     Run one of those per job
     """
     handler = OptunaHandler(optuna_storage_config.get("name", None), optuna_storage_config.get("storage", None), work_dir, user_config, run_serial)
     handler.set_objective(objective)
-    handler.set_sampler(sampler)
+    handler.set_sampler(construct_sampler(sampler_config))
     handler.initialise(n_trials)
     handler.optimise()
     handler.finalise()
@@ -68,13 +68,12 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
 
     LOG.info(f"Number of jobs: {jobs}\nNumber of trials: {trials}")
 
-    sampler = construct_sampler(optuna_config.get("sampler", None))
-
     make_dir(work_dir)
 
     procs = []
     for trial in trials_list:
-        procs.append(Process(target=optimise_run, args=(objective, optuna_storage_config, sampler, trial, work_dir, user_config, run_serial)))
+        procs.append(Process(target=optimise_run,
+                             args=(objective, optuna_storage_config, optuna_config.get("sampler", None), trial, work_dir, user_config, run_serial)))
         procs[-1].start()
         sleep(5)
 

@@ -12,7 +12,7 @@ class-naming-style=PascalCase
 good-names=ax, df, i, j, k, x, y, z
 
 [MESSAGES CONTROL]
-disable=useless-object-inheritance,missing-function-docstring,too-many-branches
+disable=useless-object-inheritance,missing-function-docstring,too-many-branches,too-many-statements
 
 [DESIGN]
 max-args=10

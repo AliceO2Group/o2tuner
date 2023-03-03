@@ -16,13 +16,19 @@ LOG = Log()
 
 
 def get_stage_work_dir(name, config):
+    """
+    Get the working directory name of a given stage by its name
+    """
     cwd_rel = config.get("cwd", name)
     return join(get_work_dir(), cwd_rel), cwd_rel
 
 
 def run_cmd_or_python(cwd, name, config):
+    """
+    Run a user python function from a given file or simply a command line
+    """
     if "python" in config:
-        # import function to be execuuted
+        # import function to be executed
         func = import_function_from_file(config["python"]["file"], config["python"]["entrypoint"])
         # cache current directory
         this_dir = getcwd()
@@ -73,7 +79,7 @@ def run_inspector(cwd, config, stages_optimisation):
         opt_config = stages_optimisation[optimisation]
         opt_cwd, _ = get_stage_work_dir(optimisation, opt_config)
         insp = O2TunerInspector()
-        if not insp.load(opt_config["optuna_config"], opt_cwd, config["config"]):
+        if not insp.load(opt_config["optuna_config"], opt_cwd):
             continue
         inspectors.append(insp)
 
@@ -90,7 +96,7 @@ def run_inspector(cwd, config, stages_optimisation):
     return ret
 
 
-def run_stages(config, which_stages):
+def run_stages(config, which_stages):  # noqa: C901
     """
     Run the stages defined in the config specified by the user
     Run all if nothing is specified

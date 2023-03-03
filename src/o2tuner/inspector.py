@@ -35,12 +35,16 @@ class O2TunerInspector:
         """
         Constructor
         """
+        # the full study to be investigated
         self._study = None
+        # cache importances of parameters
         self._importances = None
-        self._opt_user_config = None
+        # cache eompleted trials
         self._trials_complete = None
+        # map internal parameter names to something else (optional)
+        self._parameter_map = None
 
-    def load(self, opt_config=None, opt_work_dir=None, opt_user_config=None):
+    def load(self, opt_config=None, opt_work_dir=None):
         """
         Loading wrapper
         """
@@ -53,7 +57,8 @@ class O2TunerInspector:
             opt_config = {}
         sampler = construct_sampler(opt_config.get("sampler", None))
         storage = opt_config.get("study", {})
-        _, self._study = load_or_create_study(storage.get("name", None), storage.get("storage", None), sampler, opt_work_dir)
+        _, self._study = load_or_create_study(storage.get("name", None), storage.get("storage", None), sampler, opt_work_dir,
+                                              create_if_not_exists=False)
         # Use only successfully completed trials
         trials_state = self._study.trials_dataframe(("state",))["state"].values
         self._trials_complete = [trial for trial, state in zip(self._study.trials, trials_state) if state == TrialState.COMPLETE.name]
@@ -61,7 +66,6 @@ class O2TunerInspector:
         trial_numbers = [trial.number for trial in self._trials_complete]
         self._trials_complete = [t for _, t in sorted(zip(trial_numbers, self._trials_complete))]
 
-        self._opt_user_config = opt_user_config
         return True
 
     def write_summary(self, filepath="o2tuner_optimisation_summary.yaml"):
@@ -99,18 +103,44 @@ class O2TunerInspector:
         """
         return [t.value for t in self._trials_complete]
 
-    def get_most_important(self, n_most_important=20):
+    def set_parameter_name_map(self, param_map):
+        """
+        Map parameter names to probably something more meaningful defined by the user
+        """
+        self._parameter_map = param_map
+
+    def map_parameter_names(self, parameter_names_raw):
+        """
+        Map parameter names to probably something more meaningful defined by the user
+        """
+        if not self._parameter_map:
+            return parameter_names_raw
+        return [self._parameter_map[pn] if pn in self._parameter_map else pn for pn in parameter_names_raw]
+
+    def get_params_importances(self, n_most_important=None):
+        """
+        Get most important parameters
+        """
         if not self._importances:
+            print("AEIUYFG")
             importances = get_param_importances(self._study, evaluator=None, params=None, target=None)
             self._importances = OrderedDict(reversed(list(importances.items())))
+
+        if not n_most_important:
+            n_most_important = len(self._importances)
+
+        # get importances of parameters
         importance_values = list(self._importances.values())
-        param_names = list(self._importances.keys())
         n_most_important = min(n_most_important, len(self._importances))
         importance_values = importance_values[-n_most_important:]
-        param_names = param_names[-n_most_important:]
-        return param_names, importance_values
 
-    def plot_importance(self, *, n_most_important=50, map_params=None):
+        # get parameter names
+        param_names = list(self._importances.keys())
+        param_names = param_names[-n_most_important:]
+
+        return param_names[:n_most_important], importance_values[:n_most_important]
+
+    def plot_importance(self, *, n_most_important=None):
         """
         Plot the importance of parameters
         Most of it based on https://optuna.readthedocs.io/en/stable/_modules/optuna/visualization/_param_importances.html#plot_param_importances
@@ -118,13 +148,10 @@ class O2TunerInspector:
         However, add some functionality we would like to have here
         """
         LOG.info("Plotting importance")
-        param_names, importance_values = self.get_most_important(n_most_important)
-
-        if map_params:
-            param_names = [map_params[pn] if pn in map_params else pn for pn in param_names]
+        param_names, importance_values = self.get_params_importances(n_most_important)
+        param_names = self.map_parameter_names(param_names)
 
         figure, ax = plt.subplots(figsize=(30, 10))
-
         y_pos = [i for i, _ in enumerate(importance_values)]
         ax.barh(y_pos, importance_values)
         ax.set_yticks(y_pos, labels=param_names)
@@ -132,12 +159,12 @@ class O2TunerInspector:
 
         return figure, ax
 
-    def plot_parallel_coordinates(self, *, n_most_important=20, map_params=None):
+    def plot_parallel_coordinates(self, *, n_most_important=None):
         """
         Plot parallel coordinates. Each horizontal line represents a trial, each vertical line a parameter
         """
         LOG.info("Plotting parallel coordinates")
-        params, _ = self.get_most_important(n_most_important)
+        params, _ = self.get_params_importances(n_most_important)
 
         losses = self.get_losses()
         curves = [[] for _ in losses]
@@ -151,8 +178,7 @@ class O2TunerInspector:
                 curves[i].append(trial.params[param_key])
 
         # re-map parameter names
-        if map_params:
-            params = [map_params[pn] if pn in map_params else pn for pn in params]
+        params = self.map_parameter_names(params)
 
         # order trials by loss and prepare colorbar
         norm_colors = mplc.Normalize(vmin=min(losses), vmax=max(losses))
@@ -186,9 +212,12 @@ class O2TunerInspector:
 
         return figure, axes
 
-    def plot_slices(self, *, n_most_important=21, map_params=None):
+    def plot_slices(self, *, n_most_important=None):
+        """
+        Plot slices
+        """
         LOG.info("Plotting slices")
-        params, _ = self.get_most_important(n_most_important)
+        params, _ = self.get_params_importances(n_most_important)
 
         n_rows = ceil(sqrt(len(params)))
         n_cols = n_rows
@@ -201,22 +230,19 @@ class O2TunerInspector:
 
         norm_colors = mplc.Normalize(vmin=0, vmax=len(losses) - 1)
         cmap = mplcm.get_cmap("Blues")
+
         # re-map parameter names
-        params_labels = params
-        if map_params:
-            params_labels = [map_params[pn] if pn in map_params else pn for pn in params]
+        params_labels = self.map_parameter_names(params)
 
         for param_key, label, ax in zip(params[::-1], params_labels[::-1], axes):
-            plot_this = True
             values = []
-            for trial in self._trials_complete:
+            this_losses = []
+            for trial, loss in zip(self._trials_complete, losses):
                 if param_key not in trial.params:
-                    plot_this = False
-                    break
+                    continue
                 values.append(trial.params[param_key])
-            if not plot_this:
-                continue
-            ax.scatter(values, losses, cmap=cmap, norm=norm_colors, c=range(len(losses)))
+                this_losses.append(loss)
+            ax.scatter(values, this_losses, cmap=cmap, norm=norm_colors, c=range(len(this_losses)))
             ax.set_xlabel(f"value of parameter {label}", fontsize=30)
             ax.set_ylabel("loss", fontsize=30)
             ax.tick_params(labelsize=30)
@@ -228,28 +254,18 @@ class O2TunerInspector:
 
         return figure, axes
 
-    def plot_correlations(self, *, n_most_important=20, map_params=None):
+    def plot_correlations(self, *, n_most_important=None):
         """
         Plot correlation among parameters
         """
         LOG.info("Plotting parameter correlations")
-        params, _ = self.get_most_important(n_most_important)
-        params_labels = params
-        if map_params:
-            params_labels = [map_params[pn] if pn in map_params else pn for pn in params]
+        params, _ = self.get_params_importances(n_most_important)
+        params_labels = self.map_parameter_names(params)
 
         param_values = []
         params_plot = []
         for param_key, label in zip(params[::-1], params_labels[::-1]):
-            plot_this = True
-            values = []
-            for trial in self._trials_complete:
-                if param_key not in trial.params:
-                    plot_this = False
-                    break
-                values.append(trial.params[param_key])
-            if not plot_this:
-                continue
+            values = [trial.params.get(param_key, np.NAN) for trial in self._trials_complete]
             param_values.append(values)
             params_plot.append(label)
 
@@ -271,28 +287,18 @@ class O2TunerInspector:
 
         return figure, ax
 
-    def plot_pairwise_scatter(self, *, n_most_important=20, map_params=None):
+    def plot_pairwise_scatter(self, *, n_most_important=None):
         """
         Plot correlation among parameters
         """
         LOG.info("Plotting pair-wise scatter")
-        params, _ = self.get_most_important(n_most_important)
-        params_labels = params
-        if map_params:
-            params_labels = [map_params[pn] if pn in map_params else pn for pn in params]
+        params, _ = self.get_params_importances(n_most_important)
+        params_labels = self.map_parameter_names(params)
 
         param_values = []
         params_plot = []
         for param_key, label in zip(params[::-1], params_labels[::-1]):
-            plot_this = True
-            values = []
-            for trial in self._trials_complete:
-                if param_key not in trial.params:
-                    plot_this = False
-                    break
-                values.append(trial.params[param_key])
-            if not plot_this:
-                continue
+            values = [trial.params.get(param_key, np.NAN) for trial in self._trials_complete]
             param_values.append(values)
             params_plot.append(label)
 
@@ -308,15 +314,13 @@ class O2TunerInspector:
 
         return figure, ax
 
-    def plot_loss_feature_history(self, *, n_most_important=20, map_params=None):
+    def plot_loss_feature_history(self, *, n_most_important=None):
         """
         Plot parameter and loss history and add correlation of each parameter and loss
         """
         LOG.info("Plot loss and feature history")
-        params, _ = self.get_most_important(n_most_important)
-        params_labels = params
-        if map_params:
-            params_labels = [map_params[pn] if pn in map_params else pn for pn in params]
+        params, _ = self.get_params_importances(n_most_important)
+        params_labels = self.map_parameter_names(params)
 
         # find the trials where the loss got better for the first time
         losses = self.get_losses()
@@ -330,18 +334,11 @@ class O2TunerInspector:
         param_values = []
         params_plot = []
         for param_key, label in zip(params[::-1], params_labels[::-1]):
-            plot_this = True
-            values = []
-            for trial in self._trials_complete:
-                if param_key not in trial.params:
-                    plot_this = False
-                    break
-                values.append(trial.params[param_key])
-            if not plot_this:
-                continue
+            values = [trial.params.get(param_key, np.NAN) for trial in self._trials_complete]
             param_values.append(values)
             params_plot.append(label)
 
+        # include the loss in the last row
         param_values.append(losses)
         params_plot.append("loss")
         params_labels.append("loss")
@@ -352,7 +349,7 @@ class O2TunerInspector:
         x_axis = range(len(param_values[0]))
 
         # Set up the matplotlib figure
-        figure, axes = plt.subplots(n_most_important + 2, 1, sharex=True, figsize=(20, 40))
+        figure, axes = plt.subplots(len(params_labels) + 1, 1, sharex=True, figsize=(20, 40))
         axes = axes.flatten()
         for i, (ax, name, values, corr) in enumerate(zip(axes, params_labels, param_values, corr_loss)):
             title = f"{name}, correlation with loss: {corr}"
@@ -364,7 +361,8 @@ class O2TunerInspector:
             ax.plot(x_axis, values, linewidth=2, color=color)
             ax.plot(better_iterations, [values[i] for i in better_iterations], color="tab:orange", linestyle="--", linewidth=2)
             ax.set_xlabel("iteration", fontsize=20)
-            if abs(max(values) / min(values)) > 10:
+            min_value = min(values)
+            if min_value > 0 and max(values) / min_value > 10:
                 ax.set_yscale("log")
             ax.set_ylabel("value", fontsize=20)
             ax.tick_params("both", labelsize=20)

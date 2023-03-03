@@ -11,8 +11,8 @@ attr-naming-style=snake_case
 class-naming-style=PascalCase
 good-names=ax, df, i, j, k, x, y, z
 
-[MESSAGES CONTROL]
-disable=useless-object-inheritance,missing-function-docstring,too-many-branches
+# [MESSAGES CONTROL]
+# disable=useless-object-inheritance,missing-function-docstring,too-many-branches
 
 [DESIGN]
 max-args=10

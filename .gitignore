@@ -4,3 +4,4 @@ env
 __pycache__
 .pytest_cache
 build
+**/o2tuner_pytest_workdir/

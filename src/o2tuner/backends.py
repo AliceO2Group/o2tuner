@@ -3,7 +3,7 @@ Mainstream and custom backends should be placed here
 """
 import sys
 from time import time
-from os import getcwd, chdir
+from os import getcwd, chdir, remove
 from os.path import join
 from inspect import signature
 import pickle
@@ -36,27 +36,65 @@ def make_trial_directory(trial):
     return cwd
 
 
-def adjust_path_sqlite(storage, workdir):
+def get_storage_identifier(storage_path):
     """
-    Make sure the path for SQLite is located either at an absolute path or relative to the specified workdir
+    From the full storage path, try to extract the identifier for what to be used
     """
-    if not storage:
+    # check if there is a known identifier
+    storage_prefixes = ["sqlite:///", "mysql:///"]
+
+    for prefix in storage_prefixes:
+        if storage_path.find(prefix) == 0:
+            return prefix
+
+    return None
+
+
+def adjust_storage_path(storage_path, workdir="./"):
+    """
+    Make sure the path is either absolute path or relative to the specified workdir.
+    Take care of storage identifier. Right now check for MySQL and SQLite.
+    """
+
+    if not storage_path:
+        # Empty path, cannot know how to deal with it, return None
         return None
-    if storage.find("sqlite:///") != 0 or not workdir:
-        return storage
-    path = storage[10:]
+
+    # check if there is a known identifier
+    check_prefix = get_storage_identifier(storage_path)
+
+    if not check_prefix:
+        # either no or unknown identifier
+        return storage_path
+
+    path = storage_path[len(check_prefix):]
     if path[0] == "/":
-        # Absolute path
-        return storage
-    return "sqlite:///" + join(workdir, path)
+        # Absolute path, just return
+        return storage_path
+
+    # re-assemble, put the working directory in between
+    return check_prefix + join(workdir, path)
 
 
-def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=None):
+def load_or_create_study(study_name=None, storage=None, sampler=None, workdir="./", create_if_not_exists=True):
     """
     Helper to load or create a study
-    Returns tuple of whether it can run via DB interface and optuna.study.study.Study
+    Returns tuple of whether it can run via storage and the created/loaded optuna.study.Study object.
+
+    Use following logic:
+
+    First, check if study exists for provided name and storage. If not, try to create a new one.
+    If that fails as well (probably at that point due to missing dependencies), attempt an in-memory
+    optimisation.
+
+    If anything before failed but a working directory and a study name is provided, check for a pickle
+    file in the given directory with <study_name>.pkl. If found, tru to load.
+    If also this does not exist, create a new in-memory study.
     """
-    storage = adjust_path_sqlite(storage, workdir)
+    storage = adjust_storage_path(storage, workdir)
+    print(storage)
+    # Flag if we must create
+    must_create = False
     if study_name and storage:
         # there is a database we can connect to for multiprocessing
         # Although optuna would come up with a unique name when study_name is None,
@@ -66,13 +104,15 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=No
             LOG.info(f"Loading existing study {study_name} from storage {storage}")
             return True, study
         except KeyError:
-            study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
-            LOG.info(f"Creating new study {study_name} at storage {storage}")
-            return True, study
+            if create_if_not_exists:
+                study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
+                LOG.info(f"Creating new study {study_name} at storage {storage}")
+                return True, study
+            must_create = True
         except ImportError as exc:
-            # Probably cannot import MySQL stuff
-            LOG.info("Probably cannot import what is needed for database access. Will try to attempt a serial run.")
-            LOG.info(exc)
+            # Probably cannot import MySQL or SQLite stuff
+            LOG.warning("Probably cannot import what is needed for database access. Will try to attempt a serial run.")
+            LOG.warning(exc)
 
     if study_name and workdir:
         # Try to see if there is a study saved here
@@ -83,26 +123,56 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=No
                 LOG.info(f"Loading existing study {study_name} from file {file_name}")
                 return False, pickle.load(save_file)
 
+    if must_create and not create_if_not_exists:
+        LOG.error(f"Study was supposed to be loaded, creating was omitted."
+                  f"However, the study {study_name} does neither exist for storage path {storage} or working directory {workdir}")
+        sys.exit(1)
+
+    # simple in-memory
+    if not study_name:
+        study_name = "o2tuner_in_memory_study"
     return False, optuna.create_study(study_name=study_name, sampler=sampler)
 
 
-def save_study(study, workdir):
+def pickle_study(study, workdir="./"):
     """
     Wrapper to pickle a study
-    Pickling is unsafe, we should try to find another way eventually
+    Pickling could be seen as being unsafe, we should try to find another way eventually
     """
-    if workdir:
-        file_name = join(workdir, f"{study.study_name}.pkl")
-        with open(file_name, "wb") as save_file:
-            pickle.dump(study, save_file)
+    file_name = join(workdir, f"{study.study_name}.pkl")
+    with open(file_name, "wb") as save_file:
+        pickle.dump(study, save_file)
+    LOG.info(f"Pickled the study {study.study_name} at {file_name}.")
+    return file_name
 
 
-class OptunaHandler(object):
+def can_do_storage(storage):
+    """
+    Basically a dry run to try and create a study for given storage
+    """
+    identifier = get_storage_identifier(storage)
+    if not identifier:
+        LOG.error(f"Storage {storage} has unknown identifier, cannot create study.")
+        return False
+    filepath = "/tmp/o2tuner_dry_run.db"
+    if exists_file(filepath):
+        remove(filepath)
+    storage = f"{identifier}{filepath}"
+    can_do, _ = load_or_create_study("o2tuner_dry_study", storage)
+    if exists_file(filepath):
+        # E.g. in case of SQLite, remove it
+        remove(filepath)
+    if not can_do:
+        LOG.error(f"Tested storage via {identifier}, cannot create study at storage {storage}.")
+    return can_do
+
+
+class OptunaHandler:
     """
     Handler based on Optuna backend
     """
 
-    def __init__(self, db_study_name=None, db_storage=None, workdir=None, user_config=None, run_serial=False) -> None:
+    def __init__(self, db_study_name=None, db_storage=None, workdir=None, user_config=None, in_memory=False) -> None:
         """
         Constructor
         """
@@ -124,10 +194,13 @@ class OptunaHandler(object):
         self.workdir = workdir
         # optional user configuration that will be passed down to each call of the objective
         self.user_config = user_config
-        # Flag to indicate if this is a serial run
-        self.run_serial = run_serial
+        # Flag to indicate if this is an in-memory run
+        self.in_memory = in_memory
 
-    def objective_wrapper(self, trial):
+    def objective_cwd_wrapper(self, trial):
+        """
+        If this trial needs a dedicated cwd, create it, change into it, run the objective and go back
+        """
         cwd = None
         this_dir = getcwd()
         if self._needs_cwd_per_trial:
@@ -139,38 +212,57 @@ class OptunaHandler(object):
         return ret
 
     def initialise(self, n_trials=100):
+        """
+        Initialise with number of trials to be done
+        """
         self._n_trials = n_trials
         has_db_access, self._study = load_or_create_study(self.db_study_name, self.db_storage, self._sampler, self.workdir)
         # Overwrite in case no DB access but a parallel execution was desired before
-        self.run_serial = not has_db_access
+        self.in_memory = not has_db_access
 
         if self.workdir:
             self._study.set_user_attr("cwd", self.workdir)
 
     def optimise(self):
-        if not self._n_trials or not self._objective:
+        """
+        Now this takes the appropriately wrapped objective of the user and passes it finally to optuna.
+        """
+        if not self._n_trials or self._n_trials < 0 or not self._objective:
             LOG.error("Not initialised: Number of trials and objective function need to be set")
             return
-        self._study.optimize(self.objective_wrapper, n_trials=self._n_trials)
+        self._study.optimize(self.objective_cwd_wrapper, n_trials=self._n_trials)
 
     def finalise(self):
-        if self.run_serial and self.workdir:
-            # Save the study if this is run serial and a workdir is given
-            save_study(self._study, self.workdir)
+        """
+        Finalise, right now only pickle if it was an in-memory run
+        """
+        if self.in_memory and self.workdir:
+            # Save the study if this is in-memory
+            pickle_study(self._study, self.workdir)
 
     def set_objective(self, objective):
+        """
+        Set the objective and wrap it if necessary.
+
+        Wrapping:
+        First, figure out if the function was decorated to indicate whether or not each trial needs a dedicated cwd to run in.
+        Second, check the function signature. A user might or might not provide an argument to pass the static config.
+        """
         sig = signature(objective)
         n_params = len(sig.parameters)
         if hasattr(objective, "needs_cwd"):
             self._needs_cwd_per_trial = True
         if n_params > 2 or not n_params:
-            LOG.error("Invalid signature of objective funtion. Need either 1 argument (only trial obj) or 2 arguments (trial object + user_config)")
+            LOG.error("Invalid signature of objective function. Need either 1 argument (only trial obj) or 2 arguments (trial object + user_config)")
             sys.exit(1)
         if n_params == 1:
             self._objective = objective
         else:
-            # Additionally pass the user config
+            # Additionally pass the static user config
             self._objective = lambda trial: objective(trial, self.user_config)
 
     def set_sampler(self, sampler):
+        """
+        Set the sampler from the outside
+        """
         self._sampler = sampler

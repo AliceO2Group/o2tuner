@@ -33,9 +33,8 @@ test-flake8() {
 
 test-pytest() {
     test-setup
-    perr "running test: pytest is now disabled"
     type pytest
-    # pytest -x tests
+    pytest -x tests -rfEsp -vv
 }
 
 test-all() {

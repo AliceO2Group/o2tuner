@@ -31,14 +31,23 @@ CONFIG_STAGES_KEYS = [CONFIG_STAGES_USER_KEY, CONFIG_STAGES_OPTIMISATION_KEY, CO
 
 
 def get_work_dir():
+    """
+    Simply return the parent workdir
+    """
     return WORK_DIR.path
 
 
 def resolve_path(rel_cwd):
+    """
+    Resolve a relative path to find it inside the current parent workdir
+    """
     return join(WORK_DIR.path, rel_cwd)
 
 
 def get_done_dir():
+    """
+    Get the directory where finished tasks are noted
+    """
     return join(WORK_DIR.path, "o2tuner_done")
 
 
@@ -53,9 +62,10 @@ class Configuration:
         self.script_dir = script_dir
         self.all_stages = None
         if not self.setup():
+            # simply exit, the errors should have been printed by setup()
             sys.exit(1)
 
-    def setup(self):
+    def setup(self):  # noqa: C901 pylint: disable=too-many-branches
         """
         * Set working directories if not specified explicitly by the user
         * Several sanity checks of configuration
@@ -148,16 +158,25 @@ class Configuration:
 
     @staticmethod
     def set_work_dir(work_dir):
+        """
+        Set the current parent workdir
+        """
         WORK_DIR.path = abspath(work_dir)
 
     @staticmethod
     def prepare_work_dir():
+        """
+        Create current workdir structure
+        """
         make_dir(WORK_DIR.path)
         o2tuner_done_dir = get_done_dir()
         make_dir(o2tuner_done_dir)
 
     @staticmethod
     def get_stages_done():
+        """
+        Get list of stages that have been done already
+        """
         done_dir = get_done_dir()
         done_files = glob(f"{done_dir}/DONE_*")
         done = []
@@ -171,6 +190,9 @@ class Configuration:
 
     @staticmethod
     def set_stage_done(name, rel_cwd):
+        """
+        Mark a stage as done
+        """
         done_dir = get_done_dir()
         done_file = join(done_dir, f"DONE_{name}")
         with open(done_file, "w", encoding="utf-8") as done:

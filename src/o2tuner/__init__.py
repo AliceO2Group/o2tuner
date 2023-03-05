@@ -14,6 +14,9 @@ LOG = Log()
 
 
 def entrypoint():
+    """
+    Global entrypoint to O2Tuner
+    """
     arg_parser = O2TunerArgumentParser()
     # arg_parser.gen_config_help(O2Tuner.get_default_conf())
     args = arg_parser.parse_args()
@@ -28,6 +31,9 @@ def entrypoint():
 
 
 def process_actions(args):
+    """
+    Steer the chosen action to be executed
+    """
     if args.version:
         ver = str(require(__package__)[0].version)
         if ver == "LAST-TAG":
@@ -42,5 +48,8 @@ def process_actions(args):
 
 
 def process_run(args):
+    """
+    Forward arguments to the central run function
+    """
     if args.action == "run":
         run(args)

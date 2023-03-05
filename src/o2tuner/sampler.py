@@ -9,6 +9,7 @@ from o2tuner.log import Log
 LOG = Log()
 
 
+# our current dictionary of sampler; eventually we might just support all of the ones available in optuna
 SAMPLERS = {"base": BaseSampler,
             "grid": GridSampler,
             "random": RandomSampler,
@@ -17,6 +18,9 @@ SAMPLERS = {"base": BaseSampler,
 
 
 def construct_sampler(sampler_config=None):
+    """
+    Construct a smapler from potential custom configuration
+    """
     if not sampler_config:
         return TPESampler()
     name = sampler_config.get("name").lower()

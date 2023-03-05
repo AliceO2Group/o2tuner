@@ -14,7 +14,8 @@ LOG = Log()
 
 
 def exists_file(path):
-    """wrapper around python's os.path.isfile
+    """
+    Wrapper around python's os.path.isfile
 
     this has the possibility to add additional functionality if needed
     """
@@ -22,7 +23,8 @@ def exists_file(path):
 
 
 def exists_dir(path):
-    """wrapper around python's os.path.isdir
+    """
+    Wrapper around python's os.path.isdir
 
     this has the possibility to add additional functionality if needed
     """
@@ -30,23 +32,20 @@ def exists_dir(path):
 
 
 def make_dir(path):
-    """create a directory
+    """
+    Create a directory
     """
     if exists(path):
         if exists_file(path):
-            # if it exists and if that is actually a file instead of a directory, fail here...
+            # if it exists and if that is actually a file instead of a directory, abort here...
             LOG.error(f"Attempted to create directory {path}. However, a file seems to exist there, quitting")
             sys.exit(1)
             # ...otherwise just warn.
         LOG.warning(f"The directory {path} already exists, not overwriting")
         return
-    # make the whole path structure
     makedirs(path)
 
 
-########
-# YAML #
-########
 class NoAliasDumperYAML(yaml.SafeDumper):
     """
     Avoid refs in dumped YAML
@@ -58,7 +57,6 @@ class NoAliasDumperYAML(yaml.SafeDumper):
 def parse_yaml(path):
     """
     Wrap YAML reading
-    https://stackoverflow.com/questions/13518819/avoid-references-in-pyyaml
     """
     path = expanduser(path)
     try:
@@ -85,9 +83,6 @@ def dump_yaml(to_yaml, path, *, no_refs=False):
         sys.exit(1)
 
 
-########
-# JSON #
-########
 def parse_json(filepath):
     """
     Wrap JSON reading, needed for interfacing with O2 cut configuration files

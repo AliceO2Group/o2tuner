@@ -22,6 +22,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade setuptools
           pip install -r requirements.txt
+          # For now always install pytest, needed e.g. by pylint when browsing though pytest dir
+          pip install pytest
       - name: Test with ${{ matrix.test-tool }}
         run: |
           pip install ${{ matrix.test-tool }}
@@ -47,6 +49,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade setuptools
           pip install -r requirements.txt
+          # For now always install pytest, needed e.g. by pylint when browsing though pytest dir
+          pip install pytest
       - name: Test with ${{ matrix.test-tool }}
         run: |
           pip install ${{ matrix.test-tool }}

@@ -25,15 +25,15 @@ def run_command(cmd, *, cwd="./", log_file=None, wait=True):
     if wait:
         proc.wait()
         if ret := proc.returncode:
-            # check the return code and exit if != 0
-            LOG.error("There seems to have been a problem with the process launched with {cmd}. Its exit code was {ret}.")
+            # check the return code and exit if != 0, if the user does not want to wait, they are responsible to handle potential errors
+            LOG.error(f"There seems to have been a problem with the process launched with {cmd}. Its exit code was {ret}.")
             sys.exit(ret)
     return proc, join(cwd, log_file)
 
 
 def load_file_as_module(path, module_name):
     """
-    load path as module
+    Load a given file as a module
     """
     lookup_key = abspath(path)
     if path in LOADED_MODULES:
@@ -51,6 +51,9 @@ def load_file_as_module(path, module_name):
 
 
 def import_function_from_module(module_name, function_name):
+    """
+    Wrapper to manually load a function from a module
+    """
     module = importlib.import_module(module_name)
     if not hasattr(module, function_name):
         LOG.error(f"Cannot find function {function_name} in module {module.__name__}")
@@ -59,6 +62,9 @@ def import_function_from_module(module_name, function_name):
 
 
 def import_function_from_file(path, function_name):
+    """
+    Manually load a function from a file
+    """
     path = abspath(path)
     module_name = load_file_as_module(path, path.replace("/", "_").replace(".", "_"))
     return import_function_from_module(module_name, function_name)

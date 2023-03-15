@@ -32,6 +32,14 @@ def test_workdir(request, monkeypatch):
 
 
 @pytest.fixture
+def test_source_dir(request):
+    """
+    Get the source dir of this test
+    """
+    return request.fspath.dirname
+
+
+@pytest.fixture
 def needs_sqlite():
     """
     Mark as to-be-skipped if sqlite3 is not present

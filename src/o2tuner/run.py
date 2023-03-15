@@ -96,7 +96,7 @@ def run_inspector(cwd, config, stages_optimisation):
     return ret
 
 
-def run_stages(config, which_stages):  # noqa: C901
+def run_stages(config, which_stages=None):  # noqa: C901
     """
     Run the stages defined in the config specified by the user
     Run all if nothing is specified

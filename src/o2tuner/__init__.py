@@ -5,8 +5,9 @@ o2tuner main module
 import sys
 from pkg_resources import require
 from o2tuner.argumentparser import O2TunerArgumentParser
-from o2tuner.tuner import O2TunerError
+from o2tuner.exception import O2TunerFatal
 from o2tuner.log import get_logger, configure_logger
+
 from o2tuner.run import run
 
 
@@ -24,7 +25,7 @@ def entrypoint():
 
     try:
         process_actions(args)
-    except O2TunerError as exc:
+    except O2TunerFatal as exc:
         LOG.error("Cannot continue: %s", exc)
         sys.exit(10)
 

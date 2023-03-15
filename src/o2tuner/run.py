@@ -4,7 +4,7 @@ Utility to run stages, bound to main entrypoint run action
 from os.path import join, abspath, expanduser, dirname
 from os import getcwd, chdir
 
-from o2tuner.system import run_command, import_function_from_file
+from o2tuner.system import run_command, import_function_from_file, get_signal_handler
 from o2tuner.optimise import optimise
 from o2tuner.io import make_dir
 from o2tuner.config import Configuration, get_work_dir, CONFIG_STAGES_USER_KEY, CONFIG_STAGES_OPTIMISATION_KEY, CONFIG_STAGES_EVALUATION_KEY
@@ -54,10 +54,15 @@ def run_optimisation(cwd, config):
         return False
     # cache current directory
     this_dir = getcwd()
+    # notify the signal handler that we are inside an optimisation run
+    signal_handler = get_signal_handler()
+    signal_handler.set_optimisation()
     # change to this cwd and afterwards back
     chdir(cwd)
     ret = optimise(func, config["optuna_config"], work_dir="./", user_config=config["config"])
     chdir(this_dir)
+    # optimisation done, no special signal handling
+    signal_handler.set_optimisation(False)
     return ret
 
 
@@ -165,6 +170,8 @@ def run(args):
     """
     arparse will execute this function
     """
+    # Prepare signal handler as the very first step (no effect if done already)
+    get_signal_handler()
     # This will already fail if the config is found not to be sane
     config = Configuration(args.config, args.script_dir or dirname(args.config))
     config.set_work_dir(abspath(expanduser(args.work_dir)))

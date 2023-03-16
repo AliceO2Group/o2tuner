@@ -92,7 +92,6 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=".
     If also this does not exist, create a new in-memory study.
     """
     storage = adjust_storage_path(storage, workdir)
-    print(storage)
     # Flag if we must create
     must_create = False
     if study_name and storage:

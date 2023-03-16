@@ -122,7 +122,6 @@ class O2TunerInspector:
         Get most important parameters
         """
         if not self._importances:
-            print("AEIUYFG")
             importances = get_param_importances(self._study, evaluator=None, params=None, target=None)
             self._importances = OrderedDict(reversed(list(importances.items())))
 
@@ -155,7 +154,9 @@ class O2TunerInspector:
         y_pos = [i for i, _ in enumerate(importance_values)]
         ax.barh(y_pos, importance_values)
         ax.set_yticks(y_pos, labels=param_names)
-        ax.set_xlabel("parameter importance")
+        ax.set_xlabel("parameter importance", fontsize=30)
+        ax.set_ylabel("parameter", fontsize=30)
+        ax.tick_params("both", labelsize=20)
 
         return figure, ax
 
@@ -195,18 +196,21 @@ class O2TunerInspector:
             for ax in axes[:-1]:
                 ax.plot(x_axis[:-1], curve, c=cmap(norm_colors(loss)))
         for i, ax in enumerate(axes[:-1]):
-            ax.set_xticks(x_axis[:-1], labels=params, rotation=45)
+            ax.set_xticks(x_axis[:-1], labels=params, rotation=45, fontsize=20)
             ax.set_xlim(x_axis[i], x_axis[i+1])
             ylims = ax.get_ylim()
             ylims_diff = ylims[1] - ylims[1]
             y_low, y_up = (ylims[0] - 0.1 * ylims_diff, ylims[1] + 0.1 * ylims_diff)
             ax.set_ylim(y_low, y_up)
             ax.get_yaxis().set_ticks([y_low, y_up])
+            ax.tick_params("y", labelsize=20)
             # trick to hide horizontal axis
             ax.spines['bottom'].set_alpha(0)
             ax.spines['top'].set_alpha(0)
 
-        mplcb.ColorbarBase(axes[-1], cmap="Blues_r", norm=norm_colors, label="loss", ticks=[min(losses), max(losses)], )
+        cbar = mplcb.ColorbarBase(axes[-1], cmap="Blues_r", norm=norm_colors, ticks=[min(losses), max(losses)])
+        cbar.ax.tick_params(labelsize=20)
+        cbar.ax.set_ylabel("loss", fontsize=20)
         figure.subplots_adjust(wspace=0)
         figure.suptitle("Parallel coordinates", fontsize=40)
 
@@ -283,7 +287,9 @@ class O2TunerInspector:
         # Draw the heatmap with the mask and correct aspect ratio
         sns.heatmap(corr, mask=mask, cmap=cmap, vmax=1, vmin=-1, center=0, square=True, linewidths=.5, cbar_kws={"shrink": .5})
         ax.tick_params(axis="x", rotation=90)
-        figure.suptitle("Parameter correlations over trials", fontsize=40)
+        ax.tick_params(axis="both", labelsize=20)
+        # set label size of colorbar to 20
+        ax.collections[0].colorbar.ax.tick_params(labelsize=20)
 
         return figure, ax
 
@@ -305,14 +311,10 @@ class O2TunerInspector:
         df = pd.DataFrame(list(zip(*param_values)), columns=params_plot)
 
         # Draw the heatmap with the mask and correct aspect ratio
-        ax = sns.pairplot(df, height=1.8, aspect=1.8, plot_kws={"edgecolor": "k", "linewidth": 0.5}, diag_kind="kde", diag_kws={"shade": True},
-                          corner=True)
-        figure = ax.figure
-        figure.set_figheight(30)
-        figure.set_figwidth(30)
-        figure.suptitle("Pair-wise scatter plot", fontsize=40)
+        pair_grid = sns.pairplot(df, height=1.8, aspect=1.8, plot_kws={"edgecolor": "k", "linewidth": 0.5}, diag_kind="kde", diag_kws={"fill": True},
+                                 corner=False)
 
-        return figure, ax
+        return pair_grid.figure, pair_grid
 
     def plot_loss_feature_history(self, *, n_most_important=None):
         """

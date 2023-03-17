@@ -8,9 +8,9 @@ from os import makedirs
 import json
 import yaml
 
-from o2tuner.log import Log
+from o2tuner.log import get_logger
 
-LOG = Log()
+LOG = get_logger()
 
 
 def exists_file(path):
@@ -38,10 +38,10 @@ def make_dir(path):
     if exists(path):
         if exists_file(path):
             # if it exists and if that is actually a file instead of a directory, abort here...
-            LOG.error(f"Attempted to create directory {path}. However, a file seems to exist there, quitting")
+            LOG.error("Attempted to create directory %s. However, a file seems to exist there, quitting", path)
             sys.exit(1)
             # ...otherwise just warn.
-        LOG.warning(f"The directory {path} already exists, not overwriting")
+        LOG.debug("The directory %s already exists, not overwriting", path)
         return
     makedirs(path)
 
@@ -63,7 +63,7 @@ def parse_yaml(path):
         with open(path, encoding="utf8") as in_file:
             return yaml.safe_load(in_file)
     except (OSError, IOError, yaml.YAMLError) as exc:
-        LOG.error(f"ERROR: Cannot parse YAML from {path} due to\n{exc}")
+        LOG.error("ERROR: Cannot parse YAML from %s due to\n%s", path, exc)
         sys.exit(1)
 
 
@@ -79,7 +79,7 @@ def dump_yaml(to_yaml, path, *, no_refs=False):
             else:
                 yaml.safe_dump(to_yaml, out_file)
     except (OSError, IOError, yaml.YAMLError) as eexc:
-        LOG.error(f"ERROR: Cannot write YAML to {path} due to\n{eexc}")
+        LOG.error("ERROR: Cannot write YAML to %s due to\n%s", path, eexc)
         sys.exit(1)
 
 
@@ -89,7 +89,7 @@ def parse_json(filepath):
     """
     filepath = expanduser(filepath)
     if not exists_file(filepath):
-        LOG.error(f"ERROR: JSON file {filepath} does not exist.")
+        LOG.error("ERROR: JSON file %s does not exist.", filepath)
         sys.exit(1)
     with open(filepath, "r", encoding="utf8") as config_file:
         return json.load(config_file)

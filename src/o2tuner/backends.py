@@ -12,9 +12,9 @@ import optuna
 
 from o2tuner.io import make_dir, exists_file
 from o2tuner.utils import annotate_trial
-from o2tuner.log import Log
+from o2tuner.log import get_logger
 
-LOG = Log()
+LOG = get_logger()
 
 
 def make_trial_directory(trial):
@@ -23,7 +23,7 @@ def make_trial_directory(trial):
     """
     user_attributes = trial.user_attrs
     if "cwd" in user_attributes:
-        LOG.error(f"This trial has already a directory attached: {user_attributes['cwd']}")
+        LOG.error("This trial has already a directory attached: %s", user_attributes["cwd"])
         sys.exit(1)
     if "cwd" not in trial.study.user_attrs:
         LOG.error("This optimisation was not configured to run inside a directory. Please define a working directory.")
@@ -100,12 +100,12 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=".
         # we force a name to be given by the user for those cases
         try:
             study = optuna.load_study(study_name=study_name, storage=storage, sampler=sampler)
-            LOG.info(f"Loading existing study {study_name} from storage {storage}")
+            LOG.debug("Loading existing study %s from storage %s", study_name, storage)
             return True, study
         except KeyError:
             if create_if_not_exists:
                 study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
-                LOG.info(f"Creating new study {study_name} at storage {storage}")
+                LOG.info("Creating new study %s at storage %s", study_name, storage)
                 return True, study
             must_create = True
         except ImportError as exc:
@@ -119,17 +119,18 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=".
         file_name = join(workdir, f"{study_name}.pkl")
         if exists_file(file_name):
             with open(file_name, "rb") as save_file:
-                LOG.info(f"Loading existing study {study_name} from file {file_name}")
+                LOG.debug("Loading existing study %s from file %s", study_name, file_name)
                 return False, pickle.load(save_file)
 
     if must_create and not create_if_not_exists:
-        LOG.error(f"Study was supposed to be loaded, creating was omitted."
-                  f"However, the study {study_name} does neither exist for storage path {storage} or working directory {workdir}")
+        LOG.error("Study was supposed to be loaded, creating was omitted."
+                  "However, the study %s does neither exist for storage path %s or working directory %s", study_name, storage, workdir)
         sys.exit(1)
 
     # simple in-memory
     if not study_name:
         study_name = "o2tuner_in_memory_study"
+    LOG.info("Creating new in-memory study %s", study_name)
     return False, optuna.create_study(study_name=study_name, sampler=sampler)
 
 
@@ -141,7 +142,7 @@ def pickle_study(study, workdir="./"):
     file_name = join(workdir, f"{study.study_name}.pkl")
     with open(file_name, "wb") as save_file:
         pickle.dump(study, save_file)
-    LOG.info(f"Pickled the study {study.study_name} at {file_name}.")
+    LOG.info("Pickled the study %s at %s.", study.study_name, file_name)
     return file_name
 
 
@@ -151,7 +152,7 @@ def can_do_storage(storage):
     """
     identifier = get_storage_identifier(storage)
     if not identifier:
-        LOG.error(f"Storage {storage} has unknown identifier, cannot create study.")
+        LOG.error("Storage %s has unknown identifier, cannot create study.", storage)
         return False
     filepath = "/tmp/o2tuner_dry_run.db"
     if exists_file(filepath):
@@ -162,7 +163,7 @@ def can_do_storage(storage):
         # E.g. in case of SQLite, remove it
         remove(filepath)
     if not can_do:
-        LOG.error(f"Tested storage via {identifier}, cannot create study at storage {storage}.")
+        LOG.error("Tested storage via %s, cannot create study at storage %s.", identifier, storage)
     return can_do
 
 
@@ -258,6 +259,8 @@ class OptunaHandler:
             self._objective = objective
         else:
             # Additionally pass the static user config
+            if not self.user_config:
+                LOG.warning("The objective takes a config argument, however, your config is empty")
             self._objective = lambda trial: objective(trial, self.user_config)
 
     def set_sampler(self, sampler):

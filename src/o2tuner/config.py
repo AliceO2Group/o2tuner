@@ -8,7 +8,7 @@ from glob import glob
 from copy import deepcopy
 
 from o2tuner.io import make_dir, parse_yaml, exists_dir
-from o2tuner.log import Log
+from o2tuner.log import get_logger
 
 
 @dataclasses.dataclass
@@ -21,7 +21,7 @@ class WorkDir:
 
 WORK_DIR = WorkDir()
 
-LOG = Log()
+LOG = get_logger()
 
 CONFIG_STAGES_USER_KEY = "stages_user"
 CONFIG_STAGES_OPTIMISATION_KEY = "stages_optimisation"
@@ -97,7 +97,7 @@ class Configuration:
 
                 if csk in (CONFIG_STAGES_OPTIMISATION_KEY, CONFIG_STAGES_EVALUATION_KEY):
                     if "file" not in value or ("objective" not in value and "entrypoint" not in value):
-                        LOG.error(f"Need \"file\" as well as \"objective\"/\"entrypoint\" for optimisation stage {name}")
+                        LOG.error("Need \"file\" as well as \"objective\"/\"entrypoint\" for optimisation stage %s", name)
                         has_error = True
                         continue
                     value["entrypoint"] = value.get("entrypoint", value.get("objective"))
@@ -111,19 +111,19 @@ class Configuration:
 
                 if csk == CONFIG_STAGES_EVALUATION_KEY:
                     if "optimisations" not in value:
-                        LOG.error(f"Need key \"optimisations\" to know which optimisations to load in {name}")
+                        LOG.error("Need key \"optimisations\" to know which optimisations to load in %s", name)
                         has_error = True
                         continue
 
                 if csk == CONFIG_STAGES_USER_KEY:
                     if "cmd" not in value and "python" not in value:
-                        LOG.error(f"Need either the \"cmd\" or \"python\" section in the config of {name}")
+                        LOG.error("Need either the \"cmd\" or \"python\" section in the config of %s", name)
                         has_error = True
                         continue
 
                     if python_dict := value.get("python", None):
                         if "file" not in python_dict or "entrypoint" not in python_dict:
-                            LOG.error(f"Need \"file\" as well as \"entrypoint\" for user stage {name}")
+                            LOG.error("Need \"file\" as well as \"entrypoint\" for user stage %s", name)
                             has_error = True
                             continue
                         # See long comment above. E.g. here could be problems if we don't deepcopy
@@ -135,7 +135,7 @@ class Configuration:
         all_stages_names = [stage[0] for stage in self.all_stages]
         for dep in all_deps:
             if dep not in all_stages_names:
-                LOG.error(f"Unknown dependency {dep}")
+                LOG.error("Unknown dependency %s", dep)
                 has_error = True
                 continue
 
@@ -146,7 +146,7 @@ class Configuration:
         Get stages for given key
         """
         if stage_key not in CONFIG_STAGES_KEYS:
-            LOG.error(f"Unknown stage key {stage_key}")
+            LOG.error("Unknown stage key %s", stage_key)
             sys.exit(1)
         return {stage[0]: stage[1] for stage in self.all_stages if stage[2] == stage_key}
 

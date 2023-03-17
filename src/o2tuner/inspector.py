@@ -21,9 +21,9 @@ from optuna.trial import TrialState
 from o2tuner.io import parse_yaml, dump_yaml
 from o2tuner.backends import load_or_create_study
 from o2tuner.sampler import construct_sampler
-from o2tuner.log import Log
+from o2tuner.log import get_logger
 
-LOG = Log()
+LOG = get_logger()
 
 
 class O2TunerInspector:
@@ -72,7 +72,7 @@ class O2TunerInspector:
         """
         Write a short summary to YAML file
         """
-        LOG.info(f"Writing optimisation summary to {filepath}")
+        LOG.info("Writing optimisation summary to %s", filepath)
         best_trial = self._study.best_trial
         user_attrs = best_trial.user_attrs
         to_write = {"n_trials": len(self._study.trials),
@@ -92,7 +92,7 @@ class O2TunerInspector:
         for trial in self._trials_complete:
             user_attrs = trial.user_attrs
             if key not in user_attrs:
-                LOG.error(f"Key {key} not in trial number {trial.number}.")
+                LOG.error("Key %s not in trial number %d.", key, trial.number)
                 sys.exit(1)
             ret_list.append(user_attrs[key])
         return ret_list
@@ -146,7 +146,7 @@ class O2TunerInspector:
 
         However, add some functionality we would like to have here
         """
-        LOG.info("Plotting importance")
+        LOG.debug("Plotting importance")
         param_names, importance_values = self.get_params_importances(n_most_important)
         param_names = self.map_parameter_names(param_names)
 
@@ -164,7 +164,7 @@ class O2TunerInspector:
         """
         Plot parallel coordinates. Each horizontal line represents a trial, each vertical line a parameter
         """
-        LOG.info("Plotting parallel coordinates")
+        LOG.debug("Plotting parallel coordinates")
         params, _ = self.get_params_importances(n_most_important)
 
         losses = self.get_losses()
@@ -220,7 +220,7 @@ class O2TunerInspector:
         """
         Plot slices
         """
-        LOG.info("Plotting slices")
+        LOG.debug("Plotting slices")
         params, _ = self.get_params_importances(n_most_important)
 
         n_rows = ceil(sqrt(len(params)))
@@ -262,7 +262,7 @@ class O2TunerInspector:
         """
         Plot correlation among parameters
         """
-        LOG.info("Plotting parameter correlations")
+        LOG.debug("Plotting parameter correlations")
         params, _ = self.get_params_importances(n_most_important)
         params_labels = self.map_parameter_names(params)
 
@@ -297,7 +297,7 @@ class O2TunerInspector:
         """
         Plot correlation among parameters
         """
-        LOG.info("Plotting pair-wise scatter")
+        LOG.debug("Plotting pair-wise scatter")
         params, _ = self.get_params_importances(n_most_important)
         params_labels = self.map_parameter_names(params)
 
@@ -320,7 +320,7 @@ class O2TunerInspector:
         """
         Plot parameter and loss history and add correlation of each parameter and loss
         """
-        LOG.info("Plot loss and feature history")
+        LOG.debug("Plot loss and feature history")
         params, _ = self.get_params_importances(n_most_important)
         params_labels = self.map_parameter_names(params)
 

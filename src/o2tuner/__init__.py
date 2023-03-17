@@ -6,11 +6,11 @@ import sys
 from pkg_resources import require
 from o2tuner.argumentparser import O2TunerArgumentParser
 from o2tuner.tuner import O2TunerError
-from o2tuner.log import Log
+from o2tuner.log import get_logger, configure_logger
 from o2tuner.run import run
 
 
-LOG = Log()
+LOG = get_logger()
 
 
 def entrypoint():
@@ -20,13 +20,12 @@ def entrypoint():
     arg_parser = O2TunerArgumentParser()
     # arg_parser.gen_config_help(O2Tuner.get_default_conf())
     args = arg_parser.parse_args()
-
-    LOG.set_quiet(args.quiet)
+    configure_logger(args.debug, args.verbosity)
 
     try:
         process_actions(args)
     except O2TunerError as exc:
-        LOG.error(f"Cannot continue: {exc}")
+        LOG.error("Cannot continue: %s", exc)
         sys.exit(10)
 
 

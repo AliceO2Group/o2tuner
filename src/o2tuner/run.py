@@ -10,9 +10,9 @@ from o2tuner.io import make_dir
 from o2tuner.config import Configuration, get_work_dir, CONFIG_STAGES_USER_KEY, CONFIG_STAGES_OPTIMISATION_KEY, CONFIG_STAGES_EVALUATION_KEY
 from o2tuner.graph import create_graph_walker
 from o2tuner.inspector import O2TunerInspector
-from o2tuner.log import Log
+from o2tuner.log import get_logger
 
-LOG = Log()
+LOG = get_logger()
 
 
 def get_stage_work_dir(name, config):
@@ -74,7 +74,7 @@ def run_inspector(cwd, config, stages_optimisation):
 
     for optimisation in config["optimisations"]:
         if optimisation not in stages_optimisation:
-            LOG.warning(f"Optimisation stage {optimisation} not defined, cannot construct inspector for that. Skip...")
+            LOG.warning("Optimisation stage %s not defined, cannot construct inspector for that. Skip...", optimisation)
             continue
         opt_config = stages_optimisation[optimisation]
         opt_cwd, _ = get_stage_work_dir(optimisation, opt_config)
@@ -128,7 +128,7 @@ def run_stages(config, which_stages=None):  # noqa: C901
     for name in which_stages:
         # These will always have precedence over "done" status
         if name not in stages_name_to_id:
-            LOG.error(f"Requested stage {name} is unknown")
+            LOG.error("Requested stage %s is unknown", name)
             return 1
         walker.set_to_do(stages_name_to_id[name])
     for name in stages_done:
@@ -137,24 +137,23 @@ def run_stages(config, which_stages=None):  # noqa: C901
     stages_to_do = walker.compute_topology()
     LOG.info("STAGES to do (in this order):")
     for std in stages_to_do:
-        LOG.info(f"  -> {stages[std][0]}")
-    LOG.info("LET'S GO\n")
+        LOG.append_log("  -> %s", stages[std][0])
 
     # Now loop stage-by-stage
     for ind in stages_to_do:
         name, value, stage_flag = stages[ind]
-        LOG.info(f"--> STAGE {name} <--")
+        LOG.info("--> STAGE %s <--", name)
         cwd, cwd_rel = get_stage_work_dir(name, value)
         make_dir(cwd)
 
         if stage_flag == CONFIG_STAGES_OPTIMISATION_KEY and not run_optimisation(cwd, value):
-            LOG.error(f"There was a problem in optimisation stage: {name}")
+            LOG.error("There was a problem in optimisation stage: %s", name)
             return 1
         if stage_flag == CONFIG_STAGES_USER_KEY and not run_cmd_or_python(cwd, name, value):
-            LOG.error(f"There was a problem in custom stage: {name}")
+            LOG.error("There was a problem in custom stage: %s", name)
             return 1
         if stage_flag == CONFIG_STAGES_EVALUATION_KEY and not run_inspector(cwd, value, stages_optimisation):
-            LOG.error(f"There was a problem in evaluation stage: {name}")
+            LOG.error("There was a problem in evaluation stage: %s", name)
             return 1
         walker.set_done(ind)
         config.set_stage_done(name, cwd_rel)

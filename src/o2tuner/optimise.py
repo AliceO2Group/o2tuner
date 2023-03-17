@@ -12,18 +12,19 @@ from o2tuner.io import make_dir, parse_yaml
 from o2tuner.backends import OptunaHandler, can_do_storage
 from o2tuner.sampler import construct_sampler
 from o2tuner.inspector import O2TunerInspector
-from o2tuner.log import Log
+from o2tuner.log import get_logger, log_on_worker
 
 # Do this to run via fork by default on latest iOS
 mp_set_start_method("fork")
 
-LOG = Log()
+LOG = get_logger()
 
 
-def optimise_run(objective, optuna_storage_config, sampler_config, n_trials, work_dir, user_config, in_memory):
+def optimise_run(objective, optuna_storage_config, sampler_config, n_trials, work_dir, user_config, in_memory, worker_id):
     """
     Run one of those per job
     """
+    log_on_worker(worker_id)
     handler = OptunaHandler(optuna_storage_config.get("name", None), optuna_storage_config.get("storage", None), work_dir, user_config, in_memory)
     handler.set_objective(objective)
     handler.set_sampler(construct_sampler(sampler_config))
@@ -53,7 +54,7 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
     in_memory = False
     if not optuna_storage_config.get("name", None) or not optuna_storage_config.get("storage", None):
         # we reduce the number of jobs to 1. Either missing the table name or the storage path will anyway always lead to a new study
-        LOG.info("No storage provided, running only one job.")
+        LOG.debug("No storage provided, running only one job in memory.")
         in_memory = True
         jobs = 1
 
@@ -61,7 +62,7 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
         return False
 
     if trials < jobs:
-        LOG.info(f"Attempt to do {trials} trials, hence reducing the number of jobs from {jobs} to {trials}")
+        LOG.warning("Attempt to do %d trials, hence reducing the number of jobs from %d to %d", trials, jobs, trials)
         jobs = trials
 
     trials_list = floor(trials / jobs)
@@ -70,14 +71,15 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
     for i in range(trials - sum(trials_list)):
         trials_list[i] += 1
 
-    LOG.info(f"Number of jobs: {jobs}\nNumber of trials: {trials}")
+    LOG.info("Number of jobs: %d\nNumber of trials: %d", jobs, trials)
 
     make_dir(work_dir)
 
     procs = []
-    for trial in trials_list:
+    for worker_id, trial in enumerate(trials_list):
         procs.append(Process(target=optimise_run,
-                             args=(objective, optuna_storage_config, optuna_config.get("sampler", None), trial, work_dir, user_config, in_memory)))
+                             args=(objective, optuna_storage_config, optuna_config.get("sampler", None), trial, work_dir, user_config,
+                                   in_memory, worker_id)))
         procs[-1].start()
         sleep(5)
 

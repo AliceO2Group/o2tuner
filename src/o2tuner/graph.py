@@ -3,9 +3,9 @@ Useful classes to define and walk through directed acyclic graphs
 """
 
 import sys
-from o2tuner.log import Log
+from o2tuner.log import get_logger
 
-LOG = Log()
+LOG = get_logger()
 
 
 class GraphDAG:  # pylint: disable=too-few-public-methods
@@ -48,7 +48,7 @@ class GraphDAG:  # pylint: disable=too-few-public-methods
             self.graph[origin][target] = True
 
             if origin > n_nodes or target > n_nodes or origin < 0 or target < 0:
-                LOG.error(f"Found edge ({origin}, {target}) but nodes must be >= 0 and < {n_nodes}")
+                LOG.error("Found edge (%d, %d) but nodes must be >= 0 and < %d", origin, target, n_nodes)
                 sys.exit(1)
             self.from_nodes[target].append(origin)
             self.to_nodes[origin].append(target)
@@ -76,7 +76,7 @@ class GraphDAG:  # pylint: disable=too-few-public-methods
         while queue:
             current = queue.pop(0)
             if current >= self.n_nodes or current < 0:
-                LOG.error(f"Found an edge which node {current} but nodes are only valid from 0 to {self.n_nodes - 1}.")
+                LOG.error("Found an edge which node %d but nodes are only valid from 0 to %d.", current, self.n_nodes - 1)
                 return False
             self.topology.append(current)
             for target in self.to_nodes[current]:

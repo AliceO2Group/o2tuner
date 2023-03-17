@@ -24,8 +24,10 @@ class O2TunerArgumentParser(argparse.ArgumentParser):
         super().add_argument("--script-dir", dest="script_dir", help="directory containing your scripts and python code")
         super().add_argument("-q", "--quiet", dest="quiet", default=False,
                              action="store_true", help="Do not print any message")
-        super().add_argument("-d", "--debug", dest="debug", default=None,
-                             action="store_true", help="Increase verbosity level")
+        super().add_argument("--debug", dest="debug", default=None,
+                             action="store_true", help="Set logging minimum severity to debug")
+        super().add_argument("--verbosity", dest="verbosity", default=0,
+                             type=int, help="Set logging verbosity")
         super().add_argument("-s", "--stages", nargs="*", help="Run until specified stage")
         super().add_argument("action", default="run",
                              nargs="?", choices=["run", "init"], help="Actions to be performed")

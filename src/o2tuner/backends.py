@@ -13,6 +13,7 @@ import optuna
 from o2tuner.io import make_dir, exists_file
 from o2tuner.utils import annotate_trial
 from o2tuner.log import get_logger
+from o2tuner.exception import O2TunerStopOptimisation
 
 LOG = get_logger()
 
@@ -76,6 +77,46 @@ def adjust_storage_path(storage_path, workdir="./"):
     return check_prefix + join(workdir, path)
 
 
+def load_or_create_study_from_storage(study_name, storage, sampler=None, create_if_not_exists=True):
+    """
+    Load or create from DB
+    """
+    try:
+        study = optuna.load_study(study_name=study_name, storage=storage, sampler=sampler)
+        LOG.debug("Loading existing study %s from storage %s", study_name, storage)
+        return study
+    except KeyError:
+        if create_if_not_exists:
+            study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
+            LOG.debug("Creating new study %s at storage %s", study_name, storage)
+            return study
+    except ImportError as exc:
+        # Probably cannot import MySQL or SQLite stuff
+        LOG.warning("Probably cannot import what is needed for database access. Will try to attempt a serial run.")
+        LOG.warning(exc)
+
+    return None
+
+
+def load_or_create_study_in_memory(study_name, workdir, sampler=None, create_if_not_exists=True):
+    """
+    Try to see if there is a study saved here
+
+    (Pickling is unsafe, we should try to find another way eventually)
+    """
+    file_name = join(workdir, f"{study_name}.pkl")
+    if not exists_file(file_name) and not create_if_not_exists:
+        return None
+    if exists_file(file_name):
+        with open(file_name, "rb") as save_file:
+            LOG.debug("Loading existing study %s from file %s", study_name, file_name)
+            return pickle.load(save_file)
+
+    LOG.debug("Creating new in-memory study %s", study_name)
+
+    return optuna.create_study(study_name=study_name, sampler=sampler)
+
+
 def load_or_create_study(study_name=None, storage=None, sampler=None, workdir="./", create_if_not_exists=True):
     """
     Helper to load or create a study
@@ -92,46 +133,25 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=".
     If also this does not exist, create a new in-memory study.
     """
     storage = adjust_storage_path(storage, workdir)
-    # Flag if we must create
-    must_create = False
     if study_name and storage:
-        # there is a database we can connect to for multiprocessing
         # Although optuna would come up with a unique name when study_name is None,
         # we force a name to be given by the user for those cases
-        try:
-            study = optuna.load_study(study_name=study_name, storage=storage, sampler=sampler)
-            LOG.debug("Loading existing study %s from storage %s", study_name, storage)
+        study = load_or_create_study_from_storage(study_name, storage, sampler, create_if_not_exists)
+        if study:
             return True, study
-        except KeyError:
-            if create_if_not_exists:
-                study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
-                LOG.info("Creating new study %s at storage %s", study_name, storage)
-                return True, study
-            must_create = True
-        except ImportError as exc:
-            # Probably cannot import MySQL or SQLite stuff
-            LOG.warning("Probably cannot import what is needed for database access. Will try to attempt a serial run.")
-            LOG.warning(exc)
 
-    if study_name and workdir:
-        # Try to see if there is a study saved here
-        # Pickling is unsafe, we should try to find another way eventually
-        file_name = join(workdir, f"{study_name}.pkl")
-        if exists_file(file_name):
-            with open(file_name, "rb") as save_file:
-                LOG.debug("Loading existing study %s from file %s", study_name, file_name)
-                return False, pickle.load(save_file)
+    if not study_name:
+        study_name = "o2tuner_in_memory_study"
 
-    if must_create and not create_if_not_exists:
+    study = load_or_create_study_in_memory(study_name, workdir, sampler, create_if_not_exists)
+
+    if not study and not create_if_not_exists:
         LOG.error("Study was supposed to be loaded, creating was omitted."
                   "However, the study %s does neither exist for storage path %s or working directory %s", study_name, storage, workdir)
         sys.exit(1)
 
     # simple in-memory
-    if not study_name:
-        study_name = "o2tuner_in_memory_study"
-    LOG.info("Creating new in-memory study %s", study_name)
-    return False, optuna.create_study(study_name=study_name, sampler=sampler)
+    return False, study
 
 
 def pickle_study(study, workdir="./"):
@@ -230,7 +250,11 @@ class OptunaHandler:
         if not self._n_trials or self._n_trials < 0 or not self._objective:
             LOG.error("Not initialised: Number of trials and objective function need to be set")
             return
-        self._study.optimize(self.objective_cwd_wrapper, n_trials=self._n_trials)
+        try:
+            self._study.optimize(self.objective_cwd_wrapper, n_trials=self._n_trials)
+        except O2TunerStopOptimisation:
+            # give it a chance to shutdown by itself before it will be removed by the parent process
+            pass
 
     def finalise(self):
         """

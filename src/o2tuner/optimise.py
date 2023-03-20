@@ -12,6 +12,8 @@ from o2tuner.io import make_dir, parse_yaml
 from o2tuner.backends import OptunaHandler, can_do_storage
 from o2tuner.sampler import construct_sampler
 from o2tuner.inspector import O2TunerInspector
+from o2tuner.exception import O2TunerStopOptimisation
+from o2tuner.system import kill_recursive
 from o2tuner.log import get_logger, log_on_worker
 
 # Do this to run via fork by default on latest iOS
@@ -34,11 +36,25 @@ def optimise_run(objective, optuna_storage_config, sampler_config, n_trials, wor
     return 0
 
 
-def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_config=None):
+def shutdown_optimisation(procs):
     """
-    This is the entry point function for all optimisation runs
+    Helper to shutdown all current optimisation processes
+    """
+    LOG.info("Please wait until the optimisation is shut down...")
+    for proc in procs:
+        # give a timeout and the chance for the processes to terminate themselves
+        kill_recursive(proc, 10)
 
-    args and kwargs will be forwarded to the objective function
+
+def prepare_optimisation(optuna_config, work_dir="o2tuner_optimise"):
+    """
+    Prepare optimisation
+
+    * create work_fir
+    * check if storage run is possible (if requested)
+    * adjust number of jobs if only a small number of trials
+
+    dictionary optuna_config is modified inline
     """
 
     # read in the configurations, if string, assume to parse a YAML, otherwise it is assumed to be a dictionary
@@ -56,14 +72,14 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
         # we reduce the number of jobs to 1. Either missing the table name or the storage path will anyway always lead to a new study
         LOG.debug("No storage provided, running only one job in memory.")
         in_memory = True
-        jobs = 1
+        optuna_config["jobs"] = 1
 
     if "storage" in optuna_storage_config and not can_do_storage(optuna_storage_config["storage"]):
         return False
 
     if trials < jobs:
         LOG.warning("Attempt to do %d trials, hence reducing the number of jobs from %d to %d", trials, jobs, trials)
-        jobs = trials
+        optuna_config["jobs"] = trials
 
     trials_list = floor(trials / jobs)
     trials_list = [trials_list] * jobs
@@ -75,21 +91,44 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
 
     make_dir(work_dir)
 
+    return trials_list, in_memory
+
+
+def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_config=None):
+    """
+    This is the entry point function for all optimisation runs
+
+    args and kwargs will be forwarded to the objective function
+    """
+
+    trials_list, in_memory = prepare_optimisation(optuna_config, work_dir)
+    optuna_storage_config = optuna_config.get("study", {})
+
     procs = []
+    keep_running = True
     for worker_id, trial in enumerate(trials_list):
-        procs.append(Process(target=optimise_run,
-                             args=(objective, optuna_storage_config, optuna_config.get("sampler", None), trial, work_dir, user_config,
-                                   in_memory, worker_id)))
-        procs[-1].start()
-        sleep(5)
-
-    while True:
-        is_alive = any(p.is_alive() for p in procs)
-        if not is_alive:
+        try:
+            procs.append(Process(target=optimise_run,
+                                 args=(objective, optuna_storage_config, optuna_config.get("sampler", None),
+                                       trial, work_dir, user_config, in_memory, worker_id)))
+            procs[-1].start()
+            # just so that we do not immediately access the same storage, it might be created by the first process
+            sleep(5)
+        except O2TunerStopOptimisation:
+            shutdown_optimisation(procs)
+            keep_running = False
             break
-        # We assume here that the optimisation might take some time, so we can sleep for a bit
-        sleep(10)
 
+    while keep_running:
+        try:
+            is_alive = any(p.is_alive() for p in procs)
+            if not is_alive:
+                break
+        except O2TunerStopOptimisation:
+            shutdown_optimisation(procs)
+            break
+
+    LOG.info("Finalise current optimisation run, please wait...")
     insp = O2TunerInspector()
     insp.load(optuna_config, work_dir)
     insp.write_summary()

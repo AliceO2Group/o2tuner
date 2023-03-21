@@ -77,6 +77,13 @@ def adjust_storage_path(storage_path, workdir="./"):
     return check_prefix + join(workdir, path)
 
 
+def get_default_storage(study_name):
+    """
+    Construct a default storage path
+    """
+    return f"sqlite:///{study_name}.db"
+
+
 def load_or_create_study_from_storage(study_name, storage, sampler=None, create_if_not_exists=True):
     """
     Load or create from DB

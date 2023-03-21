@@ -9,7 +9,7 @@ from multiprocessing import set_start_method as mp_set_start_method
 import functools
 
 from o2tuner.io import make_dir, parse_yaml
-from o2tuner.backends import OptunaHandler, can_do_storage
+from o2tuner.backends import OptunaHandler, can_do_storage, get_default_storage
 from o2tuner.sampler import construct_sampler
 from o2tuner.inspector import O2TunerInspector
 from o2tuner.exception import O2TunerStopOptimisation
@@ -64,22 +64,34 @@ def prepare_optimisation(optuna_config, work_dir="o2tuner_optimise"):
     trials = optuna_config.get("trials", 100)
     jobs = optuna_config.get("jobs", 1)
 
-    # investigate storage properties
-    optuna_storage_config = optuna_config.get("study", {})
-
-    in_memory = False
-    if not optuna_storage_config.get("name", None) or not optuna_storage_config.get("storage", None):
-        # we reduce the number of jobs to 1. Either missing the table name or the storage path will anyway always lead to a new study
-        LOG.debug("No storage provided, running only one job in memory.")
-        in_memory = True
-        optuna_config["jobs"] = 1
-
-    if "storage" in optuna_storage_config and not can_do_storage(optuna_storage_config["storage"]):
-        return False
-
     if trials < jobs:
         LOG.warning("Attempt to do %d trials, hence reducing the number of jobs from %d to %d", trials, jobs, trials)
         optuna_config["jobs"] = trials
+
+    # investigate storage properties
+    optuna_storage_config = optuna_config.get("study", {})
+
+    # first, see what we got
+    study_name = optuna_storage_config.get("name", "o2tuner_study")
+    storage = optuna_storage_config.get("storage", None)
+    in_memory = optuna_storage_config.get("in_memory", False)
+
+    if in_memory:
+        jobs = 1
+
+    if not storage and not in_memory:
+        # make a default storage, optimisation via storage should be the way to go
+        storage = get_default_storage(study_name)
+
+    if not in_memory and not can_do_storage(storage):
+        # no worries - at this point - if optimisation via storage is not possible
+        optuna_storage_config["storage"] = None
+        if jobs > 1:
+            # however, if more than 1 one requested, abort the preparation here
+            LOG.error("Requested %d jobs but problem to set up storage %s", jobs, storage)
+            return None, None, None
+    else:
+        optuna_storage_config["storage"] = storage
 
     trials_list = floor(trials / jobs)
     trials_list = [trials_list] * jobs
@@ -91,7 +103,7 @@ def prepare_optimisation(optuna_config, work_dir="o2tuner_optimise"):
 
     make_dir(work_dir)
 
-    return trials_list, in_memory
+    return trials_list, study_name, storage
 
 
 def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_config=None):
@@ -101,8 +113,13 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
     args and kwargs will be forwarded to the objective function
     """
 
-    trials_list, in_memory = prepare_optimisation(optuna_config, work_dir)
-    optuna_storage_config = optuna_config.get("study", {})
+    trials_list, study_name, storage = prepare_optimisation(optuna_config, work_dir)
+    if study_name is None:
+        # that is a sign that the preparation went wrong
+        return False
+
+    # storage might be None at this point
+    optuna_storage_config = {"name": study_name, "storage": storage}
 
     procs = []
     keep_running = True
@@ -110,7 +127,7 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
         try:
             procs.append(Process(target=optimise_run,
                                  args=(objective, optuna_storage_config, optuna_config.get("sampler", None),
-                                       trial, work_dir, user_config, in_memory, worker_id)))
+                                       trial, work_dir, user_config, not storage, worker_id)))
             procs[-1].start()
             # just so that we do not immediately access the same storage, it might be created by the first process
             sleep(5)

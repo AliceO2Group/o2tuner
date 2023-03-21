@@ -7,6 +7,7 @@ stages_optimisation:
   optimisation:
     config:
       some_key: some_value
+    cwd: optimisation_other
     file: optimise.py
     objective: objective
     jobs: 2     # desired number of jobs
@@ -14,5 +15,6 @@ stages_optimisation:
     study:      # where the study is stored (only give a name and leave out "storage" key if you do not have MySQL working, it will anyway fall back to the serial run if it cannot communicate with MySQL)
       name: "test_study"
       storage: sqlite:///opt.db
+      in_memory: False
     deps:
       - hello

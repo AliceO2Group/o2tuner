@@ -23,7 +23,7 @@ def test_inmemory_optimisation():
     Simple in-memory optimisation
     """
     study_name = "o2tuner_test_study"
-    optuna_config = {"study": {"name": study_name},
+    optuna_config = {"study": {"name": study_name, "in_memory": True},
                      "trials": 100}
     assert optimise(objective, optuna_config, work_dir="./")
     assert exists(f"{study_name}.pkl")
@@ -47,7 +47,7 @@ def test_full_inmemory_optimisation():
     Full optimisation and inspector chain in-memory
     """
     study_name = "o2tuner_test_study"
-    optuna_config = {"study": {"name": study_name},
+    optuna_config = {"study": {"name": study_name, "in_memory": True},
                      "trials": 100}
     assert optimise(objective, optuna_config, work_dir="./")
     # now resume

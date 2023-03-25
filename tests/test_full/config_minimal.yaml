@@ -1,0 +1,13 @@
+stages_user:
+  hello:
+    cmd: "echo Hello"
+
+
+stages_optimisation:
+  optimisation:
+    config:
+      some_key: some_value
+    file: optimise.py
+    objective: objective
+    deps:
+      - hello

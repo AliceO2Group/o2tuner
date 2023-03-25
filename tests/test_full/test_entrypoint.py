@@ -4,21 +4,22 @@ Test optimisation chain
 from os.path import exists, join
 
 from o2tuner.run import run
+from o2tuner.bookkeeping import AttrHolder
 
 
-class AttrHolder:  # pylint: disable=(too-few-public-methods
+def test_entrypoint_full_config(needs_sqlite, test_source_dir):  # pylint: disable=unused-argument
     """
-    To emulate what is done from argparse
+    Simple optimisation using SQLite storage, use full optimisation config
     """
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+    config = join(test_source_dir, "config_full.yaml")
+    assert exists(config)
+    assert run(AttrHolder(config=config, work_dir="./", script_dir=None, stages=None)) == 0
 
 
-def test_entrypoint(needs_sqlite, test_source_dir):  # pylint: disable=unused-argument
+def test_entrypoint_minimal_config(needs_sqlite, test_source_dir):  # pylint: disable=unused-argument
     """
-    Simple optimisation using SQLite storage
+    Simple optimisation using SQLite storage, use minimal optimisation
     """
-    config = join(test_source_dir, "config.yaml")
+    config = join(test_source_dir, "config_minimal.yaml")
     assert exists(config)
     assert run(AttrHolder(config=config, work_dir="./", script_dir=None, stages=None)) == 0

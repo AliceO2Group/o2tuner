@@ -65,7 +65,63 @@ class Configuration:
             # simply exit, the errors should have been printed by setup()
             sys.exit(1)
 
-    def setup(self):  # noqa: C901 pylint: disable=too-many-branches
+    def setup_optimisation_stage(self, name, value):
+        """
+        Setup an optimisation stage
+        """
+        if "file" not in value or ("entrypoint" not in value and "objective" not in value):
+            LOG.error("Need \"file\" as well as \"objective\" or \"entrypoint\" for optimisation stage %s", name)
+            return False
+        value["file"] = join(self.script_dir, value["file"])
+        value["entrypoint"] = value.get("entrypoint", value["objective"])
+
+        optuna_config = {k: v for k, v in value.items() if k not in ("entrypoint", "file", "config")}
+        optuna_config["study"] = optuna_config.get("study", {"name": name})
+        optuna_config["study"]["name"] = optuna_config["study"].get("name", name)
+        value["optuna_config"] = optuna_config
+
+        return True
+
+    def setup_evaluation_stage(self, name, value):
+        """
+        Setup an evaluation stage
+        """
+        if "file" not in value or "entrypoint" not in value:
+            LOG.error("Need \"file\" as well as \"entrypoint\" for optimisation stage %s", name)
+            return False
+        value["file"] = join(self.script_dir, value["file"])
+
+        if "optimisations" not in value:
+            LOG.error("Need key \"optimisations\" to know which optimisations to load in %s", name)
+            return False
+        evaluation_deps = value.get("deps", [])
+        for opt in value["optimisations"]:
+            if opt in evaluation_deps:
+                continue
+            evaluation_deps.append(opt)
+        value["deps"] = evaluation_deps
+
+        return True
+
+    def setup_user_stage(self, name, value):
+        """
+        Setup a user stage
+        """
+        if "cmd" not in value and "python" not in value:
+            LOG.error("Need either the \"cmd\" or \"python\" section in the config of %s", name)
+            return False
+
+        if python_dict := value.get("python", None):
+            if "file" not in python_dict or "entrypoint" not in python_dict:
+                LOG.error("Need \"file\" as well as \"entrypoint\" for user stage %s", name)
+                return False
+            # See long comment above. E.g. here could be problems if we don't deepcopy
+            # (but again, we cannot deepcopy the overall self.user_config_dict
+            value["python"]["file"] = join(self.script_dir, value["python"]["file"])
+
+        return True
+
+    def setup(self):
         """
         * Set working directories if not specified explicitly by the user
         * Several sanity checks of configuration
@@ -95,40 +151,14 @@ class Configuration:
                 value["config"] = value.get("config", {})
                 all_deps.extend(value.get("deps", []))
 
-                if csk in (CONFIG_STAGES_OPTIMISATION_KEY, CONFIG_STAGES_EVALUATION_KEY):
-                    if "file" not in value or ("objective" not in value and "entrypoint" not in value):
-                        LOG.error("Need \"file\" as well as \"objective\"/\"entrypoint\" for optimisation stage %s", name)
-                        has_error = True
-                        continue
-                    value["entrypoint"] = value.get("entrypoint", value.get("objective"))
-                    value["file"] = join(self.script_dir, value["file"])
-
                 if csk == CONFIG_STAGES_OPTIMISATION_KEY:
-                    optuna_config = {k: v for k, v in value.items() if k not in ("entrypoint", "file", "config")}
-                    optuna_config["study"] = optuna_config.get("study", {"name": name})
-                    optuna_config["study"]["name"] = optuna_config["study"].get("name", name)
-                    value["optuna_config"] = optuna_config
+                    has_error = not self.setup_optimisation_stage(name, value) or has_error
 
                 if csk == CONFIG_STAGES_EVALUATION_KEY:
-                    if "optimisations" not in value:
-                        LOG.error("Need key \"optimisations\" to know which optimisations to load in %s", name)
-                        has_error = True
-                        continue
+                    has_error = not self.setup_evaluation_stage(name, value) or has_error
 
                 if csk == CONFIG_STAGES_USER_KEY:
-                    if "cmd" not in value and "python" not in value:
-                        LOG.error("Need either the \"cmd\" or \"python\" section in the config of %s", name)
-                        has_error = True
-                        continue
-
-                    if python_dict := value.get("python", None):
-                        if "file" not in python_dict or "entrypoint" not in python_dict:
-                            LOG.error("Need \"file\" as well as \"entrypoint\" for user stage %s", name)
-                            has_error = True
-                            continue
-                        # See long comment above. E.g. here could be problems if we don't deepcopy
-                        # (but again, we cannot deepcopy the overall self.user_config_dict
-                        value["python"]["file"] = join(self.script_dir, value["python"]["file"])
+                    has_error = not self.setup_user_stage(name, value) or has_error
 
                 self.all_stages.append((name, value, csk))
 

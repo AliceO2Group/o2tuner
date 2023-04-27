@@ -2,12 +2,19 @@ stages_user:
   hello:
     cmd: "echo Hello"
 
+  evaluate:
+    optimisations:
+      - optimisation
+    python:
+      file: evaluate.py
+      entrypoint: evaluate
+
 
 stages_optimisation:
   optimisation:
     config:
       some_key: some_value
-    cwd: optimisation_other
+    cwd: optimisation
     file: optimise.py
     objective: objective
     jobs: 2     # desired number of jobs

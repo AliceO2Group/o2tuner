@@ -7,7 +7,7 @@ from os import getcwd, chdir
 from o2tuner.system import run_command, import_function_from_file, get_signal_handler
 from o2tuner.optimise import optimise
 from o2tuner.io import make_dir
-from o2tuner.config import Configuration, get_work_dir, CONFIG_STAGES_USER_KEY, CONFIG_STAGES_OPTIMISATION_KEY, CONFIG_STAGES_EVALUATION_KEY
+from o2tuner.config import Configuration, get_work_dir, CONFIG_STAGES_USER_KEY, CONFIG_STAGES_OPTIMISATION_KEY
 from o2tuner.graph import create_graph_walker
 from o2tuner.inspector import O2TunerInspector
 from o2tuner.log import get_logger
@@ -23,25 +23,36 @@ def get_stage_work_dir(name, config):
     return join(get_work_dir(), cwd_rel), cwd_rel
 
 
-def run_cmd_or_python(cwd, name, config):
+def run_cmd_or_python(cwd, name, config, stages_optimisation):
     """
     Run a user python function from a given file or simply a command line
     """
-    if "python" in config:
-        # import function to be executed
-        func = import_function_from_file(config["python"]["file"], config["python"]["entrypoint"])
-        # cache current directory
-        this_dir = getcwd()
-        # change to this cwd and afterwards back
-        chdir(cwd)
-        if user_config := config["config"]:
-            ret = func(user_config)
-        else:
-            ret = func()
-        chdir(this_dir)
-        return ret
-    run_command(config["cmd"], cwd=cwd, log_file=config.get("log_file", f"{name}.log"), wait=True)
-    return True
+    if "python" not in config:
+        run_command(config["cmd"], cwd=cwd, log_file=config.get("log_file", f"{name}.log"), wait=True)
+        return True
+
+    # import function to be executed
+    func = import_function_from_file(config["python"]["file"], config["python"]["entrypoint"])
+    # see if we need to pass in any inspectors with loaded optimisations
+    inspectors = []
+    for optimisation in config["optimisations"]:
+        if optimisation not in stages_optimisation:
+            LOG.warning("Optimisation stage %s not defined, cannot construct inspector for that. Skip...", optimisation)
+            continue
+        opt_config = stages_optimisation[optimisation]
+        opt_cwd, _ = get_stage_work_dir(optimisation, opt_config)
+        insp = O2TunerInspector()
+        if not insp.load(opt_config["optuna_config"], opt_cwd):
+            continue
+        inspectors.append(insp)
+    # cache current directory
+    this_dir = getcwd()
+    # change to this cwd and afterwards back
+    chdir(cwd)
+    pass_config = config.get("config", None)
+    ret = func(inspectors, pass_config)
+    chdir(this_dir)
+    return ret
 
 
 def run_optimisation(cwd, config):
@@ -63,41 +74,6 @@ def run_optimisation(cwd, config):
     chdir(this_dir)
     # optimisation done, no special signal handling
     signal_handler.set_optimisation(False)
-    return ret
-
-
-def run_inspector(cwd, config, stages_optimisation):
-    """
-    Wrapper to run the optimisation.
-    """
-    func_name = config["entrypoint"]
-    func = import_function_from_file(config["file"], func_name)
-    if not func:
-        return False
-
-    inspectors = []
-
-    for optimisation in config["optimisations"]:
-        if optimisation not in stages_optimisation:
-            LOG.warning("Optimisation stage %s not defined, cannot construct inspector for that. Skip...", optimisation)
-            continue
-        opt_config = stages_optimisation[optimisation]
-        opt_cwd, _ = get_stage_work_dir(optimisation, opt_config)
-        insp = O2TunerInspector()
-        if not insp.load(opt_config["optuna_config"], opt_cwd):
-            continue
-        inspectors.append(insp)
-
-    if not inspectors:
-        LOG.warning("No O2TunerInspectors loaded, nothing to do")
-        return False
-
-    # cache current directory
-    this_dir = getcwd()
-    # change to this cwd and afterwards back
-    chdir(cwd)
-    ret = func(inspectors, config["config"])
-    chdir(this_dir)
     return ret
 
 
@@ -154,11 +130,8 @@ def run_stages(config, which_stages=None):  # noqa: C901
         if stage_flag == CONFIG_STAGES_OPTIMISATION_KEY and not run_optimisation(cwd, value):
             LOG.error("There was a problem in optimisation stage: %s", name)
             return 1
-        if stage_flag == CONFIG_STAGES_USER_KEY and not run_cmd_or_python(cwd, name, value):
+        if stage_flag == CONFIG_STAGES_USER_KEY and not run_cmd_or_python(cwd, name, value, stages_optimisation):
             LOG.error("There was a problem in custom stage: %s", name)
-            return 1
-        if stage_flag == CONFIG_STAGES_EVALUATION_KEY and not run_inspector(cwd, value, stages_optimisation):
-            LOG.error("There was a problem in evaluation stage: %s", name)
             return 1
         walker.set_done(ind)
         config.set_stage_done(name, cwd_rel)

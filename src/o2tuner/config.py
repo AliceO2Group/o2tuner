@@ -25,9 +25,8 @@ LOG = get_logger()
 
 CONFIG_STAGES_USER_KEY = "stages_user"
 CONFIG_STAGES_OPTIMISATION_KEY = "stages_optimisation"
-CONFIG_STAGES_EVALUATION_KEY = "stages_evaluation"
 
-CONFIG_STAGES_KEYS = [CONFIG_STAGES_USER_KEY, CONFIG_STAGES_OPTIMISATION_KEY, CONFIG_STAGES_EVALUATION_KEY]
+CONFIG_STAGES_KEYS = [CONFIG_STAGES_USER_KEY, CONFIG_STAGES_OPTIMISATION_KEY]
 
 
 def get_work_dir():
@@ -82,27 +81,6 @@ class Configuration:
 
         return True
 
-    def setup_evaluation_stage(self, name, value):
-        """
-        Setup an evaluation stage
-        """
-        if "file" not in value or "entrypoint" not in value:
-            LOG.error("Need \"file\" as well as \"entrypoint\" for optimisation stage %s", name)
-            return False
-        value["file"] = join(self.script_dir, value["file"])
-
-        if "optimisations" not in value:
-            LOG.error("Need key \"optimisations\" to know which optimisations to load in %s", name)
-            return False
-        evaluation_deps = value.get("deps", [])
-        for opt in value["optimisations"]:
-            if opt in evaluation_deps:
-                continue
-            evaluation_deps.append(opt)
-        value["deps"] = evaluation_deps
-
-        return True
-
     def setup_user_stage(self, name, value):
         """
         Setup a user stage
@@ -119,6 +97,21 @@ class Configuration:
             # (but again, we cannot deepcopy the overall self.user_config_dict
             value["python"]["file"] = join(self.script_dir, value["python"]["file"])
 
+            # let's see if any optimisation are requested (which will eventually passed in via O2Inspectors)
+            if "optimisations" in value:
+                user_deps = value.get("deps", [])
+                for opt in value["optimisations"]:
+                    if opt in user_deps:
+                        continue
+                    user_deps.append(opt)
+                value["deps"] = user_deps
+            return True
+
+        if "optimisation" in value:
+            # Not running a python script, but optimisation specified, but we cannot make use of this functionality in shell
+            LOG.error("Since not executing a python script in stage %s, cannot make use of what is specified under \"optimisations\" key", name)
+            return False
+
         return True
 
     def setup(self):
@@ -128,9 +121,9 @@ class Configuration:
         """
         config = self.user_config_dict
         # We require at least one of the stages
-        if CONFIG_STAGES_USER_KEY not in config and CONFIG_STAGES_OPTIMISATION_KEY not in config and CONFIG_STAGES_EVALUATION_KEY not in config:
+        if CONFIG_STAGES_USER_KEY not in config and CONFIG_STAGES_OPTIMISATION_KEY not in config:
             LOG.error("At least one of the stages needs to be there:")
-            print(f"  - {CONFIG_STAGES_USER_KEY}\n  - {CONFIG_STAGES_OPTIMISATION_KEY}/n  - {CONFIG_STAGES_EVALUATION_KEY}")
+            print(f"  - {CONFIG_STAGES_USER_KEY}\n  - {CONFIG_STAGES_OPTIMISATION_KEY}")
             sys.exit(1)
 
         self.all_stages = []
@@ -153,9 +146,6 @@ class Configuration:
 
                 if csk == CONFIG_STAGES_OPTIMISATION_KEY:
                     has_error = not self.setup_optimisation_stage(name, value) or has_error
-
-                if csk == CONFIG_STAGES_EVALUATION_KEY:
-                    has_error = not self.setup_evaluation_stage(name, value) or has_error
 
                 if csk == CONFIG_STAGES_USER_KEY:
                     has_error = not self.setup_user_stage(name, value) or has_error

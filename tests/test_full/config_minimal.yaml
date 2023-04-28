@@ -2,6 +2,12 @@ stages_user:
   hello:
     cmd: "echo Hello"
 
+  evaluate:
+      optimisations:
+        - optimisation
+      python:
+        file: evaluate.py
+        entrypoint: evaluate
 
 stages_optimisation:
   optimisation:

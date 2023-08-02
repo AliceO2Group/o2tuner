@@ -6,6 +6,7 @@ from time import time
 from os import getcwd, chdir, remove
 from os.path import join
 from inspect import signature
+from copy import deepcopy
 import pickle
 
 import optuna
@@ -224,6 +225,14 @@ class OptunaHandler:
         # Flag to indicate if this is an in-memory run
         self.in_memory = in_memory
 
+    def finalise_configuration(self):
+        """
+        Pass in some O2Tuner related configurations that might be interesting for the user
+        """
+        sampler = self._study.sampler
+        if isinstance(sampler, optuna.samplers.GridSampler):
+            self.user_config["O2TUNER_GridSampler_SearchSpace"] = deepcopy(sampler._search_space)  # pylint: disable=protected-access
+
     def objective_cwd_wrapper(self, trial):
         """
         If this trial needs a dedicated cwd, create it, change into it, run the objective and go back
@@ -257,6 +266,8 @@ class OptunaHandler:
         if not self._n_trials or self._n_trials < 0 or not self._objective:
             LOG.error("Not initialised: Number of trials and objective function need to be set")
             return
+        # add some special configuration
+        self.finalise_configuration()
         try:
             self._study.optimize(self.objective_cwd_wrapper, n_trials=self._n_trials)
         except O2TunerStopOptimisation:

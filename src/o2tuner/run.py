@@ -3,6 +3,7 @@ Utility to run stages, bound to main entrypoint run action
 """
 from os.path import join, abspath, expanduser, dirname
 from os import getcwd, chdir
+from inspect import signature
 
 from o2tuner.system import run_command, import_function_from_file, get_signal_handler
 from o2tuner.optimise import optimise
@@ -35,7 +36,7 @@ def run_cmd_or_python(cwd, name, config, stages_optimisation):
     func = import_function_from_file(config["python"]["file"], config["python"]["entrypoint"])
     # see if we need to pass in any inspectors with loaded optimisations
     inspectors = []
-    for optimisation in config["optimisations"]:
+    for optimisation in config.get("optimisations", []):
         if optimisation not in stages_optimisation:
             LOG.warning("Optimisation stage %s not defined, cannot construct inspector for that. Skip...", optimisation)
             continue
@@ -50,7 +51,24 @@ def run_cmd_or_python(cwd, name, config, stages_optimisation):
     # change to this cwd and afterwards back
     chdir(cwd)
     pass_config = config.get("config", None)
-    ret = func(inspectors, pass_config)
+
+    # now we check the signature of the function
+    sig = signature(func)
+    n_params = len(sig.parameters)
+    if n_params == 1:
+        if inspectors:
+            LOG.error("Your function signature has no place to pass in the optimisations. Following optimisations were given")
+            for optimisation in config.get("optimisations", []):
+                LOG.append_log(optimisation)
+            ret = 1
+        ret = func(pass_config)
+    elif n_params == 2:
+        if not inspectors:
+            LOG.warning("Your function %s might expect optimisations to be passed, but non were given in the configuration", name)
+        ret = func(inspectors, pass_config)
+    else:
+        LOG.error("The function signature of user stage %s is wrong. Need either 1 (config) or 2 (inspectors, config) arguments.")
+        ret = 1
     chdir(this_dir)
     return ret
 

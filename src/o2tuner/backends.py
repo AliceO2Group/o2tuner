@@ -3,11 +3,13 @@ Mainstream and custom backends should be placed here
 """
 import sys
 from time import time
-from os import getcwd, chdir, remove
+from os import getcwd, chdir
 from os.path import join
 from inspect import signature
 from copy import deepcopy
 import pickle
+# import needed to ensure sanity of storage
+from sqlalchemy.exc import NoSuchModuleError
 
 import optuna
 
@@ -38,7 +40,7 @@ def make_trial_directory(trial):
     return cwd
 
 
-def get_storage_identifier(storage_path):
+def adjust_storage_url(storage_url, workdir="./"):
     """
     From the full storage path, try to extract the identifier for what to be used
     """
@@ -46,43 +48,59 @@ def get_storage_identifier(storage_path):
     storage_prefixes = ["sqlite:///", "mysql:///"]
 
     for prefix in storage_prefixes:
-        if storage_path.find(prefix) == 0:
-            return prefix
+        if storage_url.find(prefix) == 0:
+            if prefix == "sqlite:///":
+                # in case of SQLite, the file could be requested to be stored under an absolute or relative path
+                path = storage_url[len(prefix):]
+                if path[0] != "/":
+                    # if not an absolute path, put the working directory in between
+                    storage_url = prefix + join(workdir, path)
+            return storage_url
 
-    return None
+    LOG.warning("Unknown storage identifier in URL %s, might fail", storage_url)
+
+    return storage_url
 
 
-def adjust_storage_path(storage_path, workdir="./"):
+def get_default_storage_url(study_name="o2tuner_study"):
+    """
+    Construct a default storage path
+    """
+    return f"sqlite:///{study_name}.db"
+
+
+def create_storage(storage, workdir="./"):
     """
     Make sure the path is either absolute path or relative to the specified workdir.
     Take care of storage identifier. Right now check for MySQL and SQLite.
     """
 
-    if not storage_path:
+    if not storage:
         # Empty path, cannot know how to deal with it, return None
         return None
 
+    # default arguments which we will use
+    # for now, use a high timeout so we don't fail if another process is currently using the storage backend
+    engine_kwargs = {"connect_args": {"timeout": 100}}
+
+    if isinstance(storage, str):
+        # simply treat this as the storage url
+        url = storage
+    else:
+        # first pop the url...
+        url = storage.pop("url", get_default_storage_url())
+        if storage:
+            # ...then check, if there is more in the dictionary; if so, use it
+            engine_kwargs = storage
+
     # check if there is a known identifier
-    check_prefix = get_storage_identifier(storage_path)
-
-    if not check_prefix:
-        # either no or unknown identifier
-        return storage_path
-
-    path = storage_path[len(check_prefix):]
-    if path[0] == "/":
-        # Absolute path, just return
-        return storage_path
-
-    # re-assemble, put the working directory in between
-    return check_prefix + join(workdir, path)
-
-
-def get_default_storage(study_name):
-    """
-    Construct a default storage path
-    """
-    return f"sqlite:///{study_name}.db"
+    url = adjust_storage_url(url, workdir)
+    try:
+        storage = optuna.storages.RDBStorage(url=url, engine_kwargs=engine_kwargs)
+        return storage
+    except (ImportError, NoSuchModuleError) as import_error:
+        LOG.error(import_error)
+    return None
 
 
 def load_or_create_study_from_storage(study_name, storage, sampler=None, create_if_not_exists=True):
@@ -91,17 +109,13 @@ def load_or_create_study_from_storage(study_name, storage, sampler=None, create_
     """
     try:
         study = optuna.load_study(study_name=study_name, storage=storage, sampler=sampler)
-        LOG.debug("Loading existing study %s from storage %s", study_name, storage)
+        LOG.debug("Loading existing study %s from storage %s", study_name, storage.url)
         return study
     except KeyError:
         if create_if_not_exists:
             study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
-            LOG.debug("Creating new study %s at storage %s", study_name, storage)
+            LOG.debug("Creating new study %s at storage %s", study_name, storage.url)
             return study
-    except ImportError as exc:
-        # Probably cannot import MySQL or SQLite stuff
-        LOG.warning("Probably cannot import what is needed for database access. Will try to attempt a serial run.")
-        LOG.warning(exc)
 
     return None
 
@@ -140,7 +154,7 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=".
     file in the given directory with <study_name>.pkl. If found, tru to load.
     If also this does not exist, create a new in-memory study.
     """
-    storage = adjust_storage_path(storage, workdir)
+    storage = create_storage(storage, workdir)
     if study_name and storage:
         # Although optuna would come up with a unique name when study_name is None,
         # we force a name to be given by the user for those cases
@@ -174,25 +188,11 @@ def pickle_study(study, workdir="./"):
     return file_name
 
 
-def can_do_storage(storage):
+def can_do_storage(storage_url):
     """
     Basically a dry run to try and create a study for given storage
     """
-    identifier = get_storage_identifier(storage)
-    if not identifier:
-        LOG.error("Storage %s has unknown identifier, cannot create study.", storage)
-        return False
-    filepath = "/tmp/o2tuner_dry_run.db"
-    if exists_file(filepath):
-        remove(filepath)
-    storage = f"{identifier}{filepath}"
-    can_do, _ = load_or_create_study("o2tuner_dry_study", storage)
-    if exists_file(filepath):
-        # E.g. in case of SQLite, remove it
-        remove(filepath)
-    if not can_do:
-        LOG.error("Tested storage via %s, cannot create study at storage %s.", identifier, storage)
-    return can_do
+    return create_storage(storage_url) is not None
 
 
 class OptunaHandler:

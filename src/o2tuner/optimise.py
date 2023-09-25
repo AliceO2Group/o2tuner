@@ -9,7 +9,7 @@ from multiprocessing import set_start_method as mp_set_start_method
 import functools
 
 from o2tuner.io import make_dir, parse_yaml
-from o2tuner.backends import OptunaHandler, can_do_storage, get_default_storage_url
+from o2tuner.backends import OptunaHandler
 from o2tuner.sampler import construct_sampler
 from o2tuner.inspector import O2TunerInspector
 from o2tuner.exception import O2TunerStopOptimisation
@@ -74,24 +74,9 @@ def prepare_optimisation(optuna_config, work_dir="o2tuner_optimise"):
     # first, see what we got
     study_name = optuna_storage_config.get("name", "o2tuner_study")
     storage = optuna_storage_config.get("storage", None)
-    in_memory = optuna_storage_config.get("in_memory", False)
 
-    if in_memory:
+    if not storage:
         jobs = 1
-
-    if not storage and not in_memory:
-        # make a default storage, optimisation via storage should be the way to go
-        storage = get_default_storage_url(study_name)
-
-    if not in_memory and not can_do_storage(storage):
-        # no worries - at this point - if optimisation via storage is not possible
-        optuna_storage_config["storage"] = None
-        if jobs > 1:
-            # however, if more than 1 job requested, abort the preparation here
-            LOG.error("Requested %d jobs but problem to set up storage %s", jobs, storage)
-            return None, None, None
-    else:
-        optuna_storage_config["storage"] = storage
 
     trials_list = floor(trials / jobs)
     trials_list = [trials_list] * jobs

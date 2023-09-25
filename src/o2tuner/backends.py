@@ -51,6 +51,7 @@ def adjust_storage_url(storage_url, workdir="./"):
         if storage_url.find(prefix) == 0:
             if prefix == "sqlite:///":
                 # in case of SQLite, the file could be requested to be stored under an absolute or relative path
+                # Do nothing for other storage URLs
                 path = storage_url[len(prefix):]
                 if path[0] != "/":
                     # if not an absolute path, put the working directory in between
@@ -69,15 +70,11 @@ def get_default_storage_url(study_name="o2tuner_study"):
     return f"sqlite:///{study_name}.db"
 
 
-def create_storage(storage, workdir="./"):
+def create_storage(storage, workdir):
     """
     Make sure the path is either absolute path or relative to the specified workdir.
     Take care of storage identifier. Right now check for MySQL and SQLite.
     """
-
-    if not storage:
-        # Empty path, cannot know how to deal with it, return None
-        return None
 
     # default arguments which we will use
     # for now, use a high timeout so we don't fail if another process is currently using the storage backend
@@ -88,7 +85,10 @@ def create_storage(storage, workdir="./"):
         url = storage
     else:
         # first pop the url...
-        url = storage.pop("url", get_default_storage_url())
+        url = storage.pop("url", None)
+        if not url:
+            LOG.error("No storage URL found in configuration")
+            return None
         if storage:
             # ...then check, if there is more in the dictionary; if so, use it
             engine_kwargs = storage
@@ -116,6 +116,7 @@ def load_or_create_study_from_storage(study_name, storage, sampler=None, create_
             study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
             LOG.debug("Creating new study %s at storage %s", study_name, storage.url)
             return study
+        LOG.error("Study %s does not exist but was supposed to be loaded.", study_name)
 
     return None
 
@@ -128,8 +129,10 @@ def load_or_create_study_in_memory(study_name, workdir, sampler=None, create_if_
     """
     file_name = join(workdir, f"{study_name}.pkl")
     if not exists_file(file_name) and not create_if_not_exists:
+        LOG.error("Study %s does not exist but was supposed to be loaded.", study_name)
         return None
     if exists_file(file_name):
+        # in this case, load
         with open(file_name, "rb") as save_file:
             LOG.debug("Loading existing study %s from file %s", study_name, file_name)
             return pickle.load(save_file)
@@ -139,7 +142,7 @@ def load_or_create_study_in_memory(study_name, workdir, sampler=None, create_if_
     return optuna.create_study(study_name=study_name, sampler=sampler)
 
 
-def load_or_create_study(study_name=None, storage=None, sampler=None, workdir="./", create_if_not_exists=True):
+def load_or_create_study(study_name, storage_config=None, sampler=None, workdir="./", create_if_not_exists=True):
     """
     Helper to load or create a study
     Returns tuple of whether it can run via storage and the created/loaded optuna.study.Study object.
@@ -154,22 +157,23 @@ def load_or_create_study(study_name=None, storage=None, sampler=None, workdir=".
     file in the given directory with <study_name>.pkl. If found, tru to load.
     If also this does not exist, create a new in-memory study.
     """
-    storage = create_storage(storage, workdir)
-    if study_name and storage:
+    if storage_config:
+        storage = create_storage(storage_config, workdir)
+        if not storage:
+            LOG.error("Storage for study %s cannot be established, please check the storage configuration.", study_name)
+            sys.exit(1)
         # Although optuna would come up with a unique name when study_name is None,
         # we force a name to be given by the user for those cases
         study = load_or_create_study_from_storage(study_name, storage, sampler, create_if_not_exists)
-        if study:
-            return True, study
-
-    if not study_name:
-        study_name = "o2tuner_in_memory_study"
+        if not study:
+            LOG.error("Study %s cannot be loaded.", study_name)
+            sys.exit(1)
+        return True, study
 
     study = load_or_create_study_in_memory(study_name, workdir, sampler, create_if_not_exists)
 
-    if not study and not create_if_not_exists:
-        LOG.error("Study was supposed to be loaded, creating was omitted."
-                  "However, the study %s does neither exist for storage path %s or working directory %s", study_name, storage, workdir)
+    if not study:
+        LOG.error("Cannot create in-memory study %s", study_name)
         sys.exit(1)
 
     # simple in-memory
@@ -186,13 +190,6 @@ def pickle_study(study, workdir="./"):
         pickle.dump(study, save_file)
     LOG.info("Pickled the study %s at %s.", study.study_name, file_name)
     return file_name
-
-
-def can_do_storage(storage_url):
-    """
-    Basically a dry run to try and create a study for given storage
-    """
-    return create_storage(storage_url) is not None
 
 
 class OptunaHandler:

@@ -43,6 +43,14 @@ class O2TunerInspector:
         self._trials_complete = None
         # map internal parameter names to something else (optional)
         self._parameter_map = None
+        # flag whether or not is multi-objective
+        self._is_multi_objective = False
+        # hold a list of trial numbers that optuna assigns internanly
+        self._trial_numbers = None
+        # map the Inspector's index of trials to the optuna trial number
+        self._number_to_index = None
+        # hold a list of Inspector's indices of the best trials
+        self._best_indices = None
 
     def load(self, opt_config=None, opt_work_dir=None):
         """
@@ -63,8 +71,12 @@ class O2TunerInspector:
         trials_state = self._study.trials_dataframe(("state",))["state"].values
         self._trials_complete = [trial for trial, state in zip(self._study.trials, trials_state) if state == TrialState.COMPLETE.name]
         # now we sort the trials according to the order in which they were done
-        trial_numbers = [trial.number for trial in self._trials_complete]
-        self._trials_complete = [t for _, t in sorted(zip(trial_numbers, self._trials_complete))]
+        self._trial_numbers = [trial.number for trial in self._trials_complete]
+        self._trials_complete = [t for _, t in sorted(zip(self._trial_numbers, self._trials_complete))]
+        self._number_to_index = {t.number: i for i, t in enumerate(self._trials_complete)}
+        self._best_indices = [self._number_to_index[t.number] for t in self._study.best_trials]
+        self._importances = [None] * len(self._study.directions)
+        self._is_multi_objective = len(self._importances) > 1
 
         return True
 
@@ -73,14 +85,27 @@ class O2TunerInspector:
         Write a short summary to YAML file
         """
         LOG.info("Writing optimisation summary to %s", filepath)
-        best_trial = self._study.best_trial
-        user_attrs = best_trial.user_attrs
+        best_trials = self._study.best_trials
+        cwds = [bt.user_attrs.get("cwd", "./") for bt in best_trials]
+        numbers = [bt.number for bt in best_trials]
         to_write = {"n_trials": len(self._study.trials),
-                    "best_trial_cwd": user_attrs.get("cwd", "./"),
-                    "best_trial_number": best_trial.number,
-                    "best_trial_loss": self._study.best_value,
-                    "best_trial_parameters": self._study.best_params}
+                    "best_trial_cwds": cwds,
+                    "best_trial_numbers": numbers}
         dump_yaml(to_write, filepath)
+
+    @property
+    def n_directions(self):
+        """
+        Get the number of directions/objectives
+        """
+        return len(self._study.directions)
+
+    @property
+    def directions(self):
+        """
+        Return the list of directions
+        """
+        return self._study.directions
 
     def get_annotation_per_trial(self, key, accept_missing_annotation=True):
         """
@@ -97,11 +122,42 @@ class O2TunerInspector:
             ret_list.append(user_attrs[key])
         return ret_list
 
-    def get_losses(self):
+    def get_losses(self, flatten=True):
         """
         Simply return list of losses
         """
-        return [t.value for t in self._trials_complete]
+        if not self._is_multi_objective and flatten:
+            return [t.value for t in self._trials_complete]
+        directions = self._study.directions
+        losses = [[] for _ in directions]
+        for t in self._trials_complete:
+            for i, v in enumerate(t.values):
+                losses[i].append(v)
+        return losses
+
+    def get_best_indices(self):
+        """
+        Get indices of best trials.
+
+        This list can be used to then get other properties, e.g. to get the losses of each best trial
+        when using get_losses()
+        """
+        return self._best_indices
+
+    def get_trial_numbers(self):
+        """
+        Get the numbers of the trials which optuna assigns internally
+        """
+        return self._trial_numbers
+
+    def get_n_trials(self):
+        """
+        Get the numnber of completed trials
+
+        This number coincides also with the number of returned losses (get_losses())
+        or annotations (get_annotations_per_trial())
+        """
+        return len(self._trials_complete)
 
     def set_parameter_name_map(self, param_map):
         """
@@ -117,29 +173,29 @@ class O2TunerInspector:
             return parameter_names_raw
         return [self._parameter_map[pn] if pn in self._parameter_map else pn for pn in parameter_names_raw]
 
-    def get_params_importances(self, n_most_important=None):
+    def get_params_importances(self, n_most_important=None, objective_number=0):
         """
         Get most important parameters
         """
-        if not self._importances:
-            importances = get_param_importances(self._study, evaluator=None, params=None, target=None)
-            self._importances = OrderedDict(reversed(list(importances.items())))
+        if not self._importances[objective_number]:
+            importances = get_param_importances(self._study, evaluator=None, params=None, target=lambda t: t.values[objective_number])
+            self._importances[objective_number] = OrderedDict(reversed(list(importances.items())))
 
         if not n_most_important:
-            n_most_important = len(self._importances)
+            n_most_important = len(self._importances[objective_number])
 
         # get importances of parameters
-        importance_values = list(self._importances.values())
-        n_most_important = min(n_most_important, len(self._importances))
+        importance_values = list(self._importances[objective_number].values())
+        n_most_important = min(n_most_important, len(self._importances[objective_number]))
         importance_values = importance_values[-n_most_important:]
 
         # get parameter names
-        param_names = list(self._importances.keys())
+        param_names = list(self._importances[objective_number].keys())
         param_names = param_names[-n_most_important:]
 
         return param_names[:n_most_important], importance_values[:n_most_important]
 
-    def plot_importance(self, *, n_most_important=None):
+    def plot_importance(self, *, n_most_important=None, objective_number=0):
         """
         Plot the importance of parameters
         Most of it based on https://optuna.readthedocs.io/en/stable/_modules/optuna/visualization/_param_importances.html#plot_param_importances
@@ -147,7 +203,7 @@ class O2TunerInspector:
         However, add some functionality we would like to have here
         """
         LOG.debug("Plotting importance")
-        param_names, importance_values = self.get_params_importances(n_most_important)
+        param_names, importance_values = self.get_params_importances(n_most_important, objective_number)
         param_names = self.map_parameter_names(param_names)
 
         figure, ax = plt.subplots(figsize=(30, 10))
@@ -160,14 +216,14 @@ class O2TunerInspector:
 
         return figure, ax
 
-    def plot_parallel_coordinates(self, *, n_most_important=None):
+    def plot_parallel_coordinates(self, *, n_most_important=None, objective_number=0):
         """
         Plot parallel coordinates. Each horizontal line represents a trial, each vertical line a parameter
         """
         LOG.debug("Plotting parallel coordinates")
-        params, _ = self.get_params_importances(n_most_important)
+        params, _ = self.get_params_importances(n_most_important, objective_number)
 
-        losses = self.get_losses()
+        losses = self.get_losses(flatten=False)[objective_number]
         curves = [[] for _ in losses]
         skip_trials = {}
 
@@ -184,7 +240,8 @@ class O2TunerInspector:
         # order trials by loss and prepare colorbar
         norm_colors = mplc.Normalize(vmin=min(losses), vmax=max(losses))
         # colorbar and sorting of losses reversed if needed
-        cmap, reverse = (mplcm.get_cmap("Blues_r"), True) if self._study.direction == StudyDirection.MINIMIZE else (mplcm.get_cmap("Blues"), False)
+        cmap, reverse = (mplcm.get_cmap("Blues_r"), True) \
+            if self._study.directions[objective_number] == StudyDirection.MINIMIZE else (mplcm.get_cmap("Blues"), False)
         curves = [c for _, c in sorted(zip(losses, curves), reverse=reverse)]
         # make sure curves of best losses are plotted last and hence on top
         losses.sort(reverse=reverse)
@@ -210,25 +267,25 @@ class O2TunerInspector:
 
         cbar = mplcb.ColorbarBase(axes[-1], cmap="Blues_r", norm=norm_colors, ticks=[min(losses), max(losses)])
         cbar.ax.tick_params(labelsize=20)
-        cbar.ax.set_ylabel("loss", fontsize=20)
+        cbar.ax.set_ylabel(f"loss {objective_number}", fontsize=20)
         figure.subplots_adjust(wspace=0)
         figure.suptitle("Parallel coordinates", fontsize=40)
 
         return figure, axes
 
-    def plot_slices(self, *, n_most_important=None):
+    def plot_slices(self, *, n_most_important=None, objective_number=0):
         """
         Plot slices
         """
         LOG.debug("Plotting slices")
-        params, _ = self.get_params_importances(n_most_important)
+        params, _ = self.get_params_importances(n_most_important, objective_number)
 
         n_rows = ceil(sqrt(len(params)))
         n_cols = n_rows
         if len(params) > n_rows**2:
             n_rows += 1
 
-        losses = self.get_losses()
+        losses = self.get_losses(flatten=False)[objective_number]
         figure, axes = plt.subplots(n_rows, n_cols, figsize=(50, 50))
         axes = axes.flatten()
 
@@ -258,12 +315,12 @@ class O2TunerInspector:
 
         return figure, axes
 
-    def plot_correlations(self, *, n_most_important=None):
+    def plot_correlations(self, *, n_most_important=None, objective_number=0):
         """
         Plot correlation among parameters
         """
         LOG.debug("Plotting parameter correlations")
-        params, _ = self.get_params_importances(n_most_important)
+        params, _ = self.get_params_importances(n_most_important, objective_number)
         params_labels = self.map_parameter_names(params)
 
         param_values = []
@@ -316,20 +373,21 @@ class O2TunerInspector:
 
         return pair_grid.figure, pair_grid
 
-    def plot_loss_feature_history(self, *, n_most_important=None):
+    def plot_loss_feature_history(self, *, n_most_important=None, objective_number=0):
         """
         Plot parameter and loss history and add correlation of each parameter and loss
         """
         LOG.debug("Plot loss and feature history")
-        params, _ = self.get_params_importances(n_most_important)
+        params, _ = self.get_params_importances(n_most_important, objective_number)
         params_labels = self.map_parameter_names(params)
 
         # find the trials where the loss got better for the first time
-        losses = self.get_losses()
+        losses = self.get_losses(flatten=False)[objective_number]
+        min_max_factor = -1 if self.directions[objective_number] == StudyDirection.MAXIMIZE else 1
         better_iterations = [0]
         current_best = losses[0]
         for i, loss in enumerate(losses[1:], start=1):
-            if loss < current_best:
+            if min_max_factor * loss < min_max_factor * current_best:
                 current_best = loss
                 better_iterations.append(i)
 
@@ -357,7 +415,7 @@ class O2TunerInspector:
             title = f"{name}, correlation with loss: {corr}"
             color = "tab:blue"
             if i == len(axes) - 2:
-                title = "loss"
+                title = f"loss {objective_number}"
                 color = "black"
 
             ax.plot(x_axis, values, linewidth=2, color=color)

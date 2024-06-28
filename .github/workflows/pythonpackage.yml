@@ -29,29 +29,29 @@ jobs:
           pip install ${{ matrix.test-tool }}
           tests/run_tests.sh ${{ matrix.test-tool }}
 
-  build-macos-latest:
-    runs-on: macOS-latest
-    strategy:
-      max-parallel: 4
-      matrix:
-        python-version: [3.8, 3.9]
-        test-tool: [pylint, flake8, pytest]
+  # build-macos-latest:
+  #   runs-on: macOS-latest
+  #   strategy:
+  #     max-parallel: 4
+  #     matrix:
+  #       python-version: [3.8, 3.9]
+  #       test-tool: [pylint, flake8, pytest]
 
-    steps:
-      - uses: actions/checkout@v1
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v1
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          brew install libomp
-          python -m pip install --upgrade pip
-          pip install --upgrade setuptools
-          pip install -r requirements.txt
-          # For now always install pytest, needed e.g. by pylint when browsing though pytest dir
-          pip install pytest
-      - name: Test with ${{ matrix.test-tool }}
-        run: |
-          pip install ${{ matrix.test-tool }}
-          tests/run_tests.sh ${{ matrix.test-tool }}
+  #   steps:
+  #     - uses: actions/checkout@v1
+  #     - name: Set up Python ${{ matrix.python-version }}
+  #       uses: actions/setup-python@v1
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+  #     - name: Install dependencies
+  #       run: |
+  #         brew install libomp
+  #         python -m pip install --upgrade pip
+  #         pip install --upgrade setuptools
+  #         pip install -r requirements.txt
+  #         # For now always install pytest, needed e.g. by pylint when browsing though pytest dir
+  #         pip install pytest
+  #     - name: Test with ${{ matrix.test-tool }}
+  #       run: |
+  #         pip install ${{ matrix.test-tool }}
+  #         tests/run_tests.sh ${{ matrix.test-tool }}

@@ -15,5 +15,7 @@ stages_optimisation:
       some_key: some_value
     file: optimise.py
     objective: objective
+    study:
+      storage: sqlite:///opt.db
     deps:
       - hello

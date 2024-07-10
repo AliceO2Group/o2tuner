@@ -76,6 +76,7 @@ class Configuration:
 
         optuna_config = {k: v for k, v in value.items() if k not in ("entrypoint", "file", "config")}
         optuna_config["study"] = optuna_config.get("study", {"name": name})
+        # by default, set the study name to the name of the optimisation stage
         optuna_config["study"]["name"] = optuna_config["study"].get("name", name)
         value["optuna_config"] = optuna_config
 

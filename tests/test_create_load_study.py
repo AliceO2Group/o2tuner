@@ -5,7 +5,7 @@ from os.path import exists
 
 import optuna
 
-from o2tuner.backends import load_or_create_study, can_do_storage, pickle_study
+from o2tuner.backends import load_or_create_study, pickle_study
 
 
 def test_inmemory_creation_and_pickle():
@@ -19,14 +19,6 @@ def test_inmemory_creation_and_pickle():
     assert study.study_name == study_name
     filename = pickle_study(study, "./")
     assert exists(filename)
-
-
-def test_storage_unknown():
-    """
-    Make sure it fails for unknown storage
-    """
-    storage = "xyz:///study"
-    assert not can_do_storage(storage)
 
 
 def test_storage_creation(needs_sqlite):  # pylint: disable=unused-argument

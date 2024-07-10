@@ -19,9 +19,8 @@ stages_optimisation:
     objective: objective
     jobs: 2     # desired number of jobs
     trials: 200 # desired number of trials
-    study:      # where the study is stored (only give a name and leave out "storage" key if you do not have MySQL working, it will anyway fall back to the serial run if it cannot communicate with MySQL)
+    study:
       name: "test_study"
       storage: sqlite:///opt.db
-      in_memory: False
     deps:
       - hello

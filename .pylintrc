@@ -17,4 +17,4 @@ good-names=ax, df, i, j, k, x, y, z
 [DESIGN]
 max-args=10
 max-locals=40
-max-attributes=10
+max-attributes=20

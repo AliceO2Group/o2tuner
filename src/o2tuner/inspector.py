@@ -269,7 +269,7 @@ class O2TunerInspector:
         param_values = []
         params_plot = []
         for param_key, label in zip(params[::-1], params_labels[::-1]):
-            values = [trial.params.get(param_key, np.NAN) for trial in self._trials_complete]
+            values = [trial.params.get(param_key, np.nan) for trial in self._trials_complete]
             param_values.append(values)
             params_plot.append(label)
 
@@ -304,7 +304,7 @@ class O2TunerInspector:
         param_values = []
         params_plot = []
         for param_key, label in zip(params[::-1], params_labels[::-1]):
-            values = [trial.params.get(param_key, np.NAN) for trial in self._trials_complete]
+            values = [trial.params.get(param_key, np.nan) for trial in self._trials_complete]
             param_values.append(values)
             params_plot.append(label)
 
@@ -336,7 +336,7 @@ class O2TunerInspector:
         param_values = []
         params_plot = []
         for param_key, label in zip(params[::-1], params_labels[::-1]):
-            values = [trial.params.get(param_key, np.NAN) for trial in self._trials_complete]
+            values = [trial.params.get(param_key, np.nan) for trial in self._trials_complete]
             param_values.append(values)
             params_plot.append(label)
 

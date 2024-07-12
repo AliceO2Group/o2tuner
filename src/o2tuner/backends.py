@@ -103,7 +103,7 @@ def create_storage(storage, workdir):
     return None
 
 
-def load_or_create_study_from_storage(study_name, storage, sampler=None, create_if_not_exists=True):
+def load_or_create_study_from_storage(study_name, storage, sampler=None, create_if_not_exists=True, directions=None):
     """
     Load or create from DB
     """
@@ -113,7 +113,7 @@ def load_or_create_study_from_storage(study_name, storage, sampler=None, create_
         return study
     except KeyError:
         if create_if_not_exists:
-            study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler)
+            study = optuna.create_study(study_name=study_name, storage=storage, sampler=sampler, directions=directions)
             LOG.debug("Creating new study %s at storage %s", study_name, storage.url)
             return study
         LOG.error("Study %s does not exist but was supposed to be loaded.", study_name)
@@ -121,7 +121,7 @@ def load_or_create_study_from_storage(study_name, storage, sampler=None, create_
     return None
 
 
-def load_or_create_study_in_memory(study_name, workdir, sampler=None, create_if_not_exists=True):
+def load_or_create_study_in_memory(study_name, workdir, sampler=None, create_if_not_exists=True, directions=None):
     """
     Try to see if there is a study saved here
 
@@ -139,10 +139,10 @@ def load_or_create_study_in_memory(study_name, workdir, sampler=None, create_if_
 
     LOG.debug("Creating new in-memory study %s", study_name)
 
-    return optuna.create_study(study_name=study_name, sampler=sampler)
+    return optuna.create_study(study_name=study_name, sampler=sampler, directions=directions)
 
 
-def load_or_create_study(study_name, storage_config=None, sampler=None, workdir="./", create_if_not_exists=True):
+def load_or_create_study(study_name, storage_config=None, sampler=None, workdir="./", create_if_not_exists=True, directions=None):
     """
     Helper to load or create a study
     Returns tuple of whether it can run via storage and the created/loaded optuna.study.Study object.
@@ -164,13 +164,13 @@ def load_or_create_study(study_name, storage_config=None, sampler=None, workdir=
             sys.exit(1)
         # Although optuna would come up with a unique name when study_name is None,
         # we force a name to be given by the user for those cases
-        study = load_or_create_study_from_storage(study_name, storage, sampler, create_if_not_exists)
+        study = load_or_create_study_from_storage(study_name, storage, sampler, create_if_not_exists, directions)
         if not study:
             LOG.error("Study %s cannot be loaded.", study_name)
             sys.exit(1)
         return True, study
 
-    study = load_or_create_study_in_memory(study_name, workdir, sampler, create_if_not_exists)
+    study = load_or_create_study_in_memory(study_name, workdir, sampler, create_if_not_exists, directions)
 
     if not study:
         LOG.error("Cannot create in-memory study %s", study_name)
@@ -205,6 +205,8 @@ class OptunaHandler:
         self._objective = None
         # Flag whether we need a dedicated cwd per trial
         self._needs_cwd_per_trial = False
+        # directions in which to optimise
+        self._directions = None
         # chosen sampler (can be None, optuna will use TPE then)
         self._sampler = None
         # our study object
@@ -249,7 +251,8 @@ class OptunaHandler:
         Initialise with number of trials to be done
         """
         self._n_trials = n_trials
-        has_db_access, self._study = load_or_create_study(self.db_study_name, self.db_storage, self._sampler, self.workdir)
+        has_db_access, self._study = load_or_create_study(self.db_study_name, self.db_storage, self._sampler, self.workdir,
+                                                          directions=self._directions)
         # Overwrite in case no DB access but a parallel execution was desired before
         self.in_memory = not has_db_access
 
@@ -291,6 +294,7 @@ class OptunaHandler:
         n_params = len(sig.parameters)
         if hasattr(objective, "needs_cwd"):
             self._needs_cwd_per_trial = True
+        self._directions = getattr(objective, 'directions', None)
         if n_params > 2 or not n_params:
             LOG.error("Invalid signature of objective function. Need either 1 argument (only trial obj) or 2 arguments (trial object + user_config)")
             sys.exit(1)

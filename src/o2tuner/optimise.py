@@ -62,7 +62,8 @@ def prepare_optimisation(optuna_config, work_dir="o2tuner_optimise"):
         optuna_config = parse_yaml(optuna_config)
 
     trials = optuna_config.get("trials", 100)
-    jobs = optuna_config.get("jobs", 1)
+    # the number of jobs shall be <= number of trials
+    jobs = min(optuna_config.get("jobs", 1), trials)
 
     if trials < jobs:
         LOG.warning("Attempt to do %d trials, hence reducing the number of jobs from %d to %d", trials, jobs, trials)
@@ -146,3 +147,25 @@ def needs_cwd(func):
         return func(*args, **kwargs)
     decorator.needs_cwd = True
     return decorator
+
+
+def directions(directions_list):
+    """
+    Decorator to indicate directions of objectives
+
+    For single-objective, the default is 'minimize'. If the objective should be maximized, the decorator should be used
+    and the single-element list ['maximize'] must be passed..
+
+    Also for multiple objectives, a list of 'maximize' and 'minimize' must be passsed to the decorator to indicate the
+    direction of each objective.
+    """
+    def directions_impl(func):
+        """
+        Decorator to derive directions argument to be given to the study in case of multiple objectives
+        """
+        @functools.wraps(func)
+        def decorator(*args, **kwargs):
+            return func(*args, **kwargs)
+        decorator.directions = directions_list
+        return decorator
+    return directions_impl

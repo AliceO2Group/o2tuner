@@ -28,6 +28,8 @@ CONFIG_STAGES_OPTIMISATION_KEY = "stages_optimisation"
 
 CONFIG_STAGES_KEYS = [CONFIG_STAGES_USER_KEY, CONFIG_STAGES_OPTIMISATION_KEY]
 
+CONFIG_STATIC_CONFIG_KEY = "config"
+
 
 def get_work_dir():
     """
@@ -127,6 +129,10 @@ class Configuration:
             print(f"  - {CONFIG_STAGES_USER_KEY}\n  - {CONFIG_STAGES_OPTIMISATION_KEY}")
             sys.exit(1)
 
+        global_config = config.get(CONFIG_STATIC_CONFIG_KEY, {})
+        if not global_config:
+            LOG.info('No global configuration passed')
+
         self.all_stages = []
         # set working directories
         all_deps = []
@@ -142,7 +148,10 @@ class Configuration:
                 config[csk][name] = deepcopy(config[csk][name])
                 value = config[csk][name]
                 value["cwd"] = value.get("cwd", name)
-                value["config"] = value.get("config", {})
+                local_config = value.get(CONFIG_STATIC_CONFIG_KEY, {})
+                # merge global and local config, local config takes precedence
+                value_config = global_config | local_config
+                value[CONFIG_STATIC_CONFIG_KEY] = value_config
                 all_deps.extend(value.get("deps", []))
 
                 if csk == CONFIG_STAGES_OPTIMISATION_KEY:

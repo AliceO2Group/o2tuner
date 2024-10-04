@@ -57,6 +57,7 @@ def objective(trial):
 
 In addition, there must be a configuration file such as
 ```yaml
+# </path/to>/config.yaml
 stages_optimisation:
     optimisation:
         file: optimisation.py
@@ -65,169 +66,230 @@ stages_optimisation:
 
 Assuming both files are in the same directory, simply run
 ```bash
-o2tuner -w </my_work_dir> -c </path/to>/config.yaml
+o2tuner -w <my_work_dir> -c </path/to>/config.yaml
 ```
 
-## The optimisation
+Please also check out some [tests](tests/test_full) if you want to have an impression of some working code, its configuration and definitions.
 
-## Defining the objective function
-The objective is the central piece of code to be implemented. The only requirements are
-1. It needs to return a scalar value,
-1. the signature must be either `func(trial)` or `func(trial, config)`.
+## Configuration
 
-The first scenario is basically the way to define an objective as one would do in the pure `optuna` case. On the other hand, `o2tuner` is able to pipe in a static config which can be accessed at runtime. To do so, change `config.yaml` to
+### Structure
+The configuration, containing both a global static configuration dictionary as well as the definition of which python functions or command lines should be run, is defined inside a `yaml` file.
+The overall structure looks like
 ```yaml
+# config.yaml
+
+config:
+  # global static configuration dictionary
+
+stages_user:
+  # dictionary to define custom user stages, e.g. to evaluate optimisation runs
+
 stages_optimisation:
-    optimisation:
-        file: optimisation.py
-        objective: objective
-        config:
-            parameter1: value1
-            parameter2: value2
+  # dictionary to define optimisations
 ```
-and in the objective function you can access the configuration dictionary.
+All top-level keys are optional. However, having neither `stages_optimisation` nor `stages_user`, there is nothing to run of course.
 
-### When your algorithm produces artifacts
-Let's take an example from particle physics and assume the aim is to optimise a detector simulation algorithm. In that case, the algorithm might leave various files after execution (such as particle kinematics, created hits, logs etc.). This will happen for each trial during the optimisation. Of course, you do not want to mix artifacts from different trials, in particular if you need to access certain files in a later stage. Therefore, the objective can be decorated
-```python
-@needs_cwd
-def objective(trial):
-    # your implementation
+
+### Define user stages
+User stages are defined under the top-level key `stages_user`. Such a stage is particularly useful to evaluate optimisation runs. Another use case could be some necessary pre-processing before an optimisation could be run.
+An example may look like
+```yaml
+stages_user: # top-level key, some pre-processing
+  pre_proc1:
+    python:                                  # run some python code
+      file: pre_proc.py
+      entrypoint: some_func                  # the function inside the pre_proc.py file to call
+    cwd: different_name_of_working_directory # optional; if not set, the name of the stage (in this case "pre_proc1") is given to the working directory
+    log_file: different_log_file_name        # optional; if not set, the name "log.log" is used
+    config:                                  # optional; can be used to add something or to override key-values in the global static configuration (locally, only for this stage)
+      another_key: another_value
+
+  pre_proc2:
+    # definition...
+    # this is assumed to be independent of any other stage
+  
+  pre_proc3:
+    # definition...
+    deps:                                    # mark this stage to depend on pre_proc1 and pre_proc2
+      - pre_proc1
+      - pre_proc2
 ```
-By doing so, each trial will be executed in its own dedicated working directory.
 
-### When you have a preparation stage
-If you need some data to start your optimisation from, it might be nice to make the optimisation workflow more self-consistent and add a stage at the very beginning to create the data or copy it from somewhere. That introduces a dependency which can be reflected in the configuration using the `deps` key
+### Define optimisation stages
+The definition of optimisation stages are very similar to the user stages. For instance
 ```yaml
 stages_user:
-    preparation:
-    # a data preparation stage
-    cmd: cp -r <from_somewhere>/* .
+  # as above
+  # one additional stage that will be used to create some evaluation plots on top of an optimisation
+  evaluate:
+    file: evaluate.py
+    entrypoint: evaluate_default
+    # config or cwd or log_file
+    optimisations:                           # list of optimisations to be processed (opt1 definition below)
+      - opt1
 
 stages_optimisation:
-    optimisation:
-        file: optimisation.py
-        objective: objective
+  opt1:
+    file: optimisation.py
+    entrypoint: objective1
+    # config or cwd or log_file, optional
     deps:
-        - preparation
+      - pre_proc3
+    # here some specific keys, all optional
+    jobs: 3                                  # optional; number of parallel jobs to run, in this case 3, default is 1
+    trials: 100                              # optional; number of optimisation trials, in this case 100; will be distributed to the parallel jobs
+    # optuna-specific settings
+    study:
+      name: different_name_of_study          # optional; default is the name of the stage, in this case "opt1"
+      storage: sqlite:///opt.db              # optional; default is sqlite:///o2tuner_study.db, note that the same DB might be used for different optimisation stages. In there, different studies could be saved under their different names
+    sampler:                                 # optional; advanced, usually not needed; default is tpe with its default args
+      name: tpe                              # tree-parzen estimator
+      args:                                  # see https://optuna.readthedocs.io/en/stable/reference/samplers/generated/optuna.samplers.TPESampler.html for possible arguments of TPE sampler
+        constant_liar: true
+        n_startup_trials: 40
 ```
-This will make sure, that the `preparation` stage will be run before the optimisation stage.
 
-### When you want to access some data
-Sticking to the data preparation example, you might want to access some of that data in you objective function. The only thing you need to know is the corresponding working directory which in this case would be `preparation`. So, what you can do is
+
+### Global static configuration
+Each python function that is defined by the user will see the dictionary under the top-level `config` key. This makes it possible to share specific settings, paths, names etc. among all stages.
+```yaml
+# config.yaml
+
+config:
+  key1: value1
+  key2: value2
+  key3:
+    key3_1: value3_1
+    key3_2: value3_2
+    key3_3:
+      - value3_3_1
+      - value3_3_2
+      - value3_3_3
+  # ...
+
+# ...
+```
+Per stage, it will be extended by what is found under the optional local `config` key. If there are keys with the same name, the ones defined in a stage take precedence *in that stage*.
+
+## The python part
+First of all: All python files that are referred to in the above configuration example should be located in one common directory.
+
+### User stages (no processing any optimisation output)
+Coming back to the definition of e.g. `pre_proc1` in the above configuration example, a python function may look like
 ```python
-from o2tuner.config import resolve_path
+# pre_proc.py
+def some_func(config):
+  # do whatever needs to be done
+  some_value = config['another_key'] # this value might be needed for something
+  # if anything goes wrong at any point, return False
 
-def objective(trial):
-    x = trial.suggest_float(0, 1)
-    y = trial.suggest_float(-5, 5)
-
-    full_path = resolve_path("preparation")
-    print(full_path)
-
-    return (x - 0.5)**2 + x**4
+  # return True to mark success of that function
+  return True
 ```
-Of course, instead of just printing the full path, you can now actually access files under that directory without knowing **where exactly** it is located.
+The `config` argument is exactly the [global static configuration](#global-static-configuration) (with extended/overriden parameters, see [User stages](#define-user-stages)).
+Also note that the function is executed inside the defined `cwd` (would be `pre_proc1` given the [above definition](#define-user-stages)). So if that stage produces any artifacts, they will be written inside this directory.
 
-### Running multiple optimisation processes in parallel
-`optuna` allows parallel execution of multiple optimisation processes. The processes (and for instance the samplers in each process) communicate via some database. The default is to use `SQLite`. If nothing particular is specified in the configuration, it will be tried to run the optimisation that way and by default, one process will be spawned. Instead of `SQLite` one could as well use `MySQL`. If `o2tuner` finds that this is not possible, it will abort.
-If you do not want to use any kind of database, you can attempt a simple in-memory run. The you need to explicitly state that you want to run one single job. You can do so with
-```yaml
-stages_optimisation:
-    optimisation:
-        file: optimisation.py
-        objective: objective
-    jobs: 1
-    deps:
-        - preparation
+### User stages (processing optimisation output)
+Coming back to the definition of e.g. `evaluate` in the above configuration example, a python funtion may look like
+```python
+# evaluate.py
+def evaluate_default(inspectors, config):
+  # do whatever needs to be done
+  # get a certain value from the config
+  value3_3_3 = config['key3']['key3_3'][2]
+  # if anything goes wrong at any point, return False
+
+  # return True to mark success of that function
+  return True
 ```
+The `inspectors` argument is a list of `O2TunerInspector` objects, see [below](#inspector). It brings in various results of the optimisation [opt1](#define-optimisation-stages).
 
-### More or less the full optimisation configuration
-The most complex an optimisation configuration might look like at the moment would be
+### Optimisation stages
+Coming back to the definition of e.g. `opt1` in the above configuration example, a python funtion may look like
+```python
+# optimisation.py
 
-```yaml
-stages_user:
-    preparation:
-    # a data preparation stage
-    cmd: cp -r <from_somewhere>/* .
-
-stages_optimisation:
-    optimisation:
-        file: optimisation.py
-        objective: objective
-    # number of parallel jobs to run
-    jobs: 10
-    # how many trials to do in total (distributed to number of workers/jobs)
-    trials: 600
-    # specify a sampler. tpe will anyway be used by default. This is to show how one can configure it further
-    sampler:
-        name: tpe
-        args:
-            constant_liar: True
-            n_startup_trials: 150
-    deps:
-        - preparation
-    config:
-        parameter1: value1
-        parameter2: value2
+@needs_cwd # optional; to indicate if each trial should be executed in its own sub-directory, can 
+# optional decorator, if the objective function only returns one value and if that value should be minimised;
+# required, if one value should be maximised OR if more than one value is returned
+# in this example, the first value should be minimised, the other maximised ==> multi-objective optimisation
+@directions(['minimize', 'minimize'])
+def objective1(trial, config):
+  # do whatever needs to be done
+  # see e.g. https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html
+  return value_to_minimise, value_to_maximise
 ```
 
-### If you want to abort/continue an optimisation
-Assume you are running an optimisation, but while it runs you realise, it is for instance not converging or there might be another problem. In such a case, one can hit `Ctrl-\` to send a `SIGQUIT` to `o2tuner`. It will tell it to return from the optimisation but finalising what has been done so far.
+#### Annotate each trial with additional information
+It might be necessary or desired to not only receive some values of the objective function during an evaluation but to also be able to have quick access to other information, e.g. some that the computation is based on.
+For instance, one might change something in the global config at some point. But to make some information persistent and link it to a trial, 
 
-On the other hand, if there is an optimisation which has been run for a few trials already, it can be continued by simply invoking
-```bash
-o2tuner -w </my_work_dir> -c </path/to>/config.yaml - s optimisation
-```
-With the `--stages/-s` flag, stages can be explicitly rerun/continued.
-
-### Save further information
-Sometimes you might want to keep some other information for each trial of an optimisation. It is therefore possible to annotate a trial with key-value pairs. Note, that it must be possible to serialise the annotations to `JSON` format. But most importantly, it is possible to annotate with all kinds of text, numbers, lists, and dictionaries thereof. This is done as follows
 ```python
 from o2tuner.utils import annotate_trial
 
-def objective(trial):
-    x = trial.suggest_float(0, 1)
-    y = trial.suggest_float(-5, 5)
-
-    annotate_trial(trial, "key", "something meaningful")
+def objective(trial, config):
+    x = trial.suggest_float(0, config['upper_x'])
+    y = trial.suggest_float(-5, config['upper_y'])
+    
+    annotate_trial(trial, 'upper_x', config['upper_x'])
+    annotate_trial(trial, 'upper_y', config['upper_y'])
+    annotate_trial(trial, "other_key", "another meaningful info")
 
     return (x - 0.5)**2 + x**4
 ```
-These annotations can be recovered later as you will see below. For instance, if there are some intermediate values which were used to calculate the loss, it might be interesting to save those for later inspection.
 
-## Other than optimising
-
-### Inspect, evaluate, plot
-If you want to explore what happened during an optimisation, you can define another stage to do so. We assume, that your optimisation stage is called `optimisation`. In the config under `stages_user`, add something like
-```yaml
-stages_user:
-    evaluate:
-        python: evaluate.py
-        entrypoint: evaluate
-    optimisations:
-        - optimisation
-    config:
-        parameter1: value1
-        parameter2: value2
+## Run
+On the shoulders of the above example, the optimisation can be run like
+```bash
+o2tuner -w <my_work_dir> -c </path/to>/config.yaml -s opt1
 ```
-This does two things: First, `optimisation` will be automatically a dependency of this `evaluate` task. Secondly, it will pass in a list of so-called `O2TunerInspector`s. In this case we are referring to a python function `evaluate` in a script `evaluate.py` (of course, one can also just throw all functions into one single python file). This function must have the signature `func(inspectors, config)` and this first argument is exactly what will be populated. `config` might be `None` if nothing was given, however in the above example, there is some static configuration.
+Everything runs inside `<my_work_dir>` to keep other directories clean. Working directories of the individual stages will be created inside that `<my_work_dir>`.
+`o2tuner` is told to run the stage `opt1`. It will therefore make sure that all dependent stages are run before or have been run already. If you want to run another stage again although it has been done already, one can run
+```bash
+o2tuner -w <my_work_dir> -c </path/to>/config.yaml -s opt1 pre_proc2
+```
+The `-c` argument gets the path to where the `config.yaml` is actually located. It is assumed that in that same directory, the code can also find the python files (in this example these would be `pre_proc.py`, `optimisation.py` and `evaluate.py`).
+If the python files are located in a different directory, `--script-dir <path/to/script_dir>`.
+
+
+### Abort/continue an optimisation
+Assume you are running an optimisation, but while it runs you realise, it is for instance not converging or there might be another problem. In such a case, one can hit `Ctrl-\` to send a `SIGQUIT` to `o2tuner`. It will tell it to return from the optimisation but finalising what has been done so far.
+**NOTE** that is is still a bit fragile and it might happen that the code does not correctly shut down the optimisation processes. However, it has not been seen that this would corrupt the optimisation database file (in the present example `opt.db`).
+
+On the other hand, if there is an optimisation which has been run for a few trials already, it can be continued and therefore extended by simply invoking
+```bash
+o2tuner -w </my_work_dir> -c </path/to>/config.yaml -s opt1
+```
+This will again run as many trials as defined in the configuration. If one only wants to add a few more trials, it has to be specified in the `config.yaml`.
+
+## Inspector
+Have another look at the `evaluate` stage from [above](#define-optimisation-stages). It expects `opt1` under the `optimisations` key.
+This implies two things:
+1. `opt1` will be treated as a dependency,
+1. each of these optimisation results (here only one optimisation) will be passed in a list of `O2TunerInspector` objects.
 
 So we will find one `O2TunerInspector` object and can use it:
 ```python
 #evaluate.py
 
 def evaluate(inspectors, config):
-    # for convenience
+    # only one optimisation
     insp = inspectors[0]
     # print losses of all successful trials
-    print(insp.get_losses())
+    losses = insp.get_losses()
+    print(losses)
 
-    # extracting some annotation
-    annotations = insp.get_annotation_per_trial("key")
-    print(annotations)
-
-    # plot the history of features/parameter values and the loss as a function of trials
-    fig, _ = insp.plot_loss_feature_history()
-    fig.savefig("loss_feature_history")
+    # check annotations
+    annotations = insp.get_annotation_per_trial("other_key")
+    # plot everything we have
+    figure, axes = insp.plot_importance()
+    # do something with axes or figure, e.g. save
+    figure, axes = insp.plot_parallel_coordinates()
+    figure, axes = insp.plot_slices()
+    figure, axes = insp.plot_correlations()
+    figure, axes = insp.plot_pairwise_scatter()
+    figure, axes = insp.plot_loss_feature_history()
 ```
+
+Of course, one can do whatever should be done with the optimisation results.

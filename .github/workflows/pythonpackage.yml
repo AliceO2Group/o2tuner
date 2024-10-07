@@ -25,6 +25,12 @@ jobs:
           # For now always install pytest, needed e.g. by pylint when browsing though pytest dir
           pip install pytest
       - name: Test with ${{ matrix.test-tool }}
+        if: contains(matrix.test-tool, 'pylint') # from pylint==3.3.0 there seem to be issues with reading the configuration from a file correctly
+        run: |
+          pip install pylint==3.2.7
+          tests/run_tests.sh ${{ matrix.test-tool }}
+      - name: Test with ${{ matrix.test-tool }}
+        if: ${{ ! contains(matrix.test-tool, 'pylint') }}
         run: |
           pip install ${{ matrix.test-tool }}
           tests/run_tests.sh ${{ matrix.test-tool }}

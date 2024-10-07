@@ -8,13 +8,13 @@ jobs:
     strategy:
       max-parallel: 6
       matrix:
-        python-version: [3.8, 3.9]
+        python-version: [3.9, 3.12]
         test-tool: [pylint, flake8, pytest]
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -25,6 +25,12 @@ jobs:
           # For now always install pytest, needed e.g. by pylint when browsing though pytest dir
           pip install pytest
       - name: Test with ${{ matrix.test-tool }}
+        if: contains(matrix.test-tool, 'pylint') # from pylint==3.3.0 there seem to be issues with reading the configuration from a file correctly
+        run: |
+          pip install pylint==3.2.7
+          tests/run_tests.sh ${{ matrix.test-tool }}
+      - name: Test with ${{ matrix.test-tool }}
+        if: ${{ ! contains(matrix.test-tool, 'pylint') }}
         run: |
           pip install ${{ matrix.test-tool }}
           tests/run_tests.sh ${{ matrix.test-tool }}
